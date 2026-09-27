@@ -1,0 +1,423 @@
+diff --git a/ggml/src/ggml-cuda/common.cuh b/ggml/src/ggml-cuda/common.cuh
+index ef929d3d7..c5297d047 100644
+--- a/ggml/src/ggml-cuda/common.cuh
++++ b/ggml/src/ggml-cuda/common.cuh
+@@ -1269,6 +1269,29 @@ struct ggml_tensor_extra_gpu {
+ #define USE_CUDA_GRAPH
+ #endif
+ 
++// [graphshapes] Cache key for the per-context CUDA graph cache.
++// `shape` is 0 for the legacy behaviour (one graph per first-node pointer).
++// When GGML_CUDA_GRAPH_SHAPECACHE is set the graph gets a stable per-shape hash,
++// so a context that alternates between two batch shapes (e.g. the MTP draft
++// context: a 3-row verify batch alternating with a 1-row draft step) keeps one
++// captured graph per shape instead of resetting warmup and re-capturing on every
++// call.
++struct ggml_cuda_graph_key {
++    const void * first_node = nullptr;
++    uint64_t     shape      = 0;
++
++    bool operator==(const ggml_cuda_graph_key & other) const {
++        return first_node == other.first_node && shape == other.shape;
++    }
++};
++
++struct ggml_cuda_graph_key_hash {
++    size_t operator()(const ggml_cuda_graph_key & k) const {
++        return std::hash<const void *>()(k.first_node)
++             ^ (size_t) (k.shape * 0x9E3779B97F4A7C15ull);
++    }
++};
++
+ struct ggml_cuda_graph {
+ #ifdef USE_CUDA_GRAPH
+     ~ggml_cuda_graph() {
+@@ -1466,13 +1489,14 @@ struct ggml_backend_cuda_context {
+     int curr_stream_no = 0;
+ 
+ #ifdef USE_CUDA_GRAPH
+-    // Map from first_node_ptr to cuda_graph - allows multiple graphs per context
+-    // when the computation is split across CPU/GPU (e.g., with --n-cpu-moe)
+-    std::unordered_map<const void *, std::unique_ptr<ggml_cuda_graph>> cuda_graphs;
++    // Map from (first_node_ptr, shape hash) to cuda_graph - allows multiple graphs per context
++    // when the computation is split across CPU/GPU (e.g., with --n-cpu-moe), and (with
++    // GGML_CUDA_GRAPH_SHAPECACHE set) one graph per distinct batch shape per key.
++    std::unordered_map<ggml_cuda_graph_key, std::unique_ptr<ggml_cuda_graph>, ggml_cuda_graph_key_hash> cuda_graphs;
+ 
+     int64_t last_graph_eviction_sweep = 0;
+ 
+-    ggml_cuda_graph * cuda_graph(const void * first_node_ptr) {
++    ggml_cuda_graph * cuda_graph(ggml_cuda_graph_key graph_key) {
+         const int64_t time_now = ggml_time_us();
+ 
+         // sweep every 5s, evicting cuda graphs unused for >=10s
+@@ -1487,9 +1511,9 @@ struct ggml_backend_cuda_context {
+             }
+         }
+ 
+-        auto it = cuda_graphs.find(first_node_ptr);
++        auto it = cuda_graphs.find(graph_key);
+         if (it == cuda_graphs.end()) {
+-            it = cuda_graphs.emplace(first_node_ptr, std::make_unique<ggml_cuda_graph>()).first;
++            it = cuda_graphs.emplace(graph_key, std::make_unique<ggml_cuda_graph>()).first;
+         }
+         it->second->last_used_time = time_now;
+         return it->second.get();
+diff --git a/ggml/src/ggml-cuda/ggml-cuda.cu b/ggml/src/ggml-cuda/ggml-cuda.cu
+index 7536a5d2a..bc60f8bbb 100644
+--- a/ggml/src/ggml-cuda/ggml-cuda.cu
++++ b/ggml/src/ggml-cuda/ggml-cuda.cu
+@@ -2,6 +2,9 @@
+ #include "ggml-impl.h"
+ #include "ggml-backend-impl.h"
+ 
++#include <cstdarg>
++#include <cstdio>
++
+ #include "ggml-cuda/allreduce.cuh"
+ #include "ggml-cuda/common.cuh"
+ #include "ggml-cuda/acc.cuh"
+@@ -2586,23 +2589,98 @@ static bool ggml_cuda_graph_check_compability(ggml_cgraph * cgraph) {
+     return use_cuda_graph;
+ }
+ 
+-static const void * ggml_cuda_graph_get_key(ggml_cgraph * cgraph) {
+-    return cgraph->nodes[0];
++// [graphshapes] Per-shape hash used as part of the CUDA graph cache key when
++// GGML_CUDA_GRAPH_SHAPECACHE is set. Derived from the graph topology only
++// (node count + each node's op/ne/nb), so that stabilising the *shape* is enough
++// for a captured graph to be reused; changing tensor *addresses* are still
++// handled by cudaGraphExecUpdate(). Without the env var the hash is 0 and the
++// key degenerates to the historical "one graph per first-node pointer".
++static bool ggml_cuda_graph_shapecache_enabled() {
++    static const bool enabled = (getenv("GGML_CUDA_GRAPH_SHAPECACHE") != nullptr);
++    return enabled;
++}
++
++static uint64_t ggml_cuda_graph_shape_hash(const ggml_cgraph * cgraph) {
++    if (!ggml_cuda_graph_shapecache_enabled()) {
++        return 0;
++    }
++
++    uint64_t h = 1469598103934665603ull; // FNV-1a
++    auto mix = [&h](uint64_t v) { h ^= v; h *= 1099511628211ull; };
++
++    mix((uint64_t) cgraph->n_nodes);
++    for (int i = 0; i < cgraph->n_nodes; i++) {
++        const ggml_tensor * node = cgraph->nodes[i];
++        if (node == nullptr) {
++            continue;
++        }
++        mix((uint64_t) node->op);
++        for (int d = 0; d < GGML_MAX_DIMS; d++) {
++            mix((uint64_t) node->ne[d]);
++            mix((uint64_t) node->nb[d]);
++        }
++    }
++
++    return h == 0 ? 1 : h;
++}
++
++static ggml_cuda_graph_key ggml_cuda_graph_get_key(ggml_cgraph * cgraph) {
++    return ggml_cuda_graph_key{ cgraph->nodes[0], ggml_cuda_graph_shape_hash(cgraph) };
++}
++
++// [ggtrace] temporary instrumentation, enabled with GGML_CUDA_GRAPH_TRACE=<n>
++// n = line budget (default 20000). Remove once the MTP graph-reuse question is settled.
++static bool ggt_enabled() {
++    static const char * env = getenv("GGML_CUDA_GRAPH_TRACE");
++    return env != nullptr;
++}
++
++static int ggt_budget() {
++    static int budget = [] {
++        const char * env = getenv("GGML_CUDA_GRAPH_TRACE");
++        if (env == nullptr) {
++            return 0;
++        }
++        const int v = atoi(env);
++        return v > 0 ? v : 20000;
++    }();
++    return budget;
++}
++
++static void ggt_log(const char * fmt, ...) {
++    static int used = 0;
++
++    if (!ggt_enabled() || used >= ggt_budget()) {
++        return;
++    }
++    used++;
++
++    va_list ap;
++    va_start(ap, fmt);
++    fputs("[ggt] ", stderr);
++    vfprintf(stderr, fmt, ap);
++    va_end(ap);
++    fflush(stderr);
+ }
+ 
+ static bool ggml_cuda_graph_update_required(ggml_backend_cuda_context * cuda_ctx, ggml_cgraph * cgraph) {
+     bool res = false;
+ 
+-    const void * graph_key = ggml_cuda_graph_get_key(cgraph);
++    const ggml_cuda_graph_key graph_key = ggml_cuda_graph_get_key(cgraph);
+     ggml_cuda_graph * graph = cuda_ctx->cuda_graph(graph_key);
+ 
+     if (cgraph->uid != 0 &&
+         cgraph->uid == graph->uid) {
++        ggt_log("update_required: uid fast path ctx=%p key=%p shape=%llu uid=%zu nodes=%d -> reuse\n",
++                (void *) cuda_ctx, (void *) graph_key.first_node, (unsigned long long) graph_key.shape,
++                (size_t) cgraph->uid, cgraph->n_nodes);
+         GGML_LOG_DEBUG("CUDA Graph id %zu reused\n", cgraph->uid);
+         GGML_ASSERT((int)graph->node_props.size() == cgraph->n_nodes);
+         return false;
+     }
+ 
++    const bool first_use = (int) graph->node_props.size() != cgraph->n_nodes;
++
+     graph->uid = cgraph->uid;
+ 
+     // Check if the graph size has changed
+@@ -2611,6 +2689,8 @@ static bool ggml_cuda_graph_update_required(ggml_backend_cuda_context * cuda_ctx
+         graph->node_props.resize(cgraph->n_nodes);
+     }
+ 
++    int n_diff = 0;
++
+     for (int i = 0; i < cgraph->n_nodes; i++) {
+         ggml_cuda_graph::node_properties prop = {};
+         memcpy(&prop.node, cgraph->nodes[i], sizeof(ggml_tensor));
+@@ -2623,16 +2703,75 @@ static bool ggml_cuda_graph_update_required(ggml_backend_cuda_context * cuda_ctx
+             }
+         }
+ 
++        const bool node_differs = memcmp(&graph->node_props[i], &prop, sizeof(prop)) != 0;
++
++        if (ggt_enabled() && node_differs) {
++            n_diff++;
++
++            if (n_diff <= 6) {
++                const ggml_cuda_graph::node_properties & o = graph->node_props[i];
++                const ggml_tensor * nd = cgraph->nodes[i];
++                bool printed = false;
++
++                ggt_log("diff ctx=%p key=%p node=%d/%d name=%s op=%s first_use=%d\n",
++            (void *) cuda_ctx, (void *) graph_key.first_node, i, cgraph->n_nodes,
++                        nd->name ? nd->name : "?", ggml_op_name(nd->op), (int) first_use);
++
++                if (o.node.op != prop.node.op) {
++                    ggt_log("  node.op %d -> %d\n", (int) o.node.op, (int) prop.node.op);
++                    printed = true;
++                }
++                if (o.node.data != prop.node.data) {
++                    ggt_log("  node.data %p -> %p\n", o.node.data, prop.node.data);
++                    printed = true;
++                }
++                if (o.node.view_src != prop.node.view_src) {
++                    ggt_log("  node.view_src %p -> %p\n", o.node.view_src, prop.node.view_src);
++                    printed = true;
++                }
++                for (int d = 0; d < GGML_MAX_DIMS; ++d) {
++                    if (o.node.ne[d] != prop.node.ne[d] || o.node.nb[d] != prop.node.nb[d]) {
++                        ggt_log("  node.ne/nb[%d] %lld/%zu -> %lld/%zu\n", d,
++                                (long long) o.node.ne[d], (size_t) o.node.nb[d],
++                                (long long) prop.node.ne[d], (size_t) prop.node.nb[d]);
++                        printed = true;
++                    }
++                }
++                for (int j = 0; j < GGML_MAX_SRC; ++j) {
++                    if (o.node_src_data_ptrs[j] != prop.node_src_data_ptrs[j]) {
++                        ggt_log("  src[%d].data %p -> %p\n", j, o.node_src_data_ptrs[j], prop.node_src_data_ptrs[j]);
++                        printed = true;
++                    }
++                    for (int d = 0; d < GGML_MAX_DIMS; ++d) {
++                        if (o.node_src_ne[j][d] != prop.node_src_ne[j][d] || o.node_src_nb[j][d] != prop.node_src_nb[j][d]) {
++                            ggt_log("  src[%d].ne/nb[%d] %lld/%zu -> %lld/%zu\n", j, d,
++                                    (long long) o.node_src_ne[j][d], (size_t) o.node_src_nb[j][d],
++                                    (long long) prop.node_src_ne[j][d], (size_t) prop.node_src_nb[j][d]);
++                            printed = true;
++                        }
++                    }
++                }
++                if (!printed) {
++                    ggt_log("  (memcmp differs but no tracked field differs)\n");
++                }
++            }
++        }
++
+         if (res || memcmp(&graph->node_props[i], &prop, sizeof(prop)) != 0) {
+             graph->node_props[i] = prop;
+             res = true;
+         }
+     }
+ 
++    ggt_log("update_required ctx=%p key=%p shape=%llu uid=%zu nodes=%d first_use=%d n_diff=%d -> %s\n",
++            (void *) cuda_ctx, (void *) graph_key.first_node, (unsigned long long) graph_key.shape,
++            (size_t) cgraph->uid, cgraph->n_nodes, (int) first_use, n_diff,
++            res ? "UPDATE" : "reuse");
++
+     return res;
+ }
+ 
+-static void ggml_cuda_graph_update_executable(ggml_backend_cuda_context * cuda_ctx, const void * graph_key) {
++static void ggml_cuda_graph_update_executable(ggml_backend_cuda_context * cuda_ctx, ggml_cuda_graph_key graph_key) {
+     ggml_cuda_graph * graph = cuda_ctx->cuda_graph(graph_key);
+ 
+ #if CUDART_VERSION >= 12000
+@@ -2644,6 +2783,9 @@ static void ggml_cuda_graph_update_executable(ggml_backend_cuda_context * cuda_c
+     cudaError_t stat = cudaGraphExecUpdate(graph->instance, graph->graph, &errorNode, &result_info);
+ #endif // CUDART_VERSION >= 12000
+ 
++    ggt_log("exec_update ctx=%p key=%p nodes=%zu stat=%d\n",
++            (void *) cuda_ctx, (void *) graph_key.first_node, graph->num_nodes, (int) stat);
++
+     if (stat == cudaErrorGraphExecUpdateFailure) {
+ #ifndef NDEBUG
+         GGML_LOG_DEBUG("%s: CUDA graph update failed\n", __func__);
+@@ -2655,6 +2797,7 @@ static void ggml_cuda_graph_update_executable(ggml_backend_cuda_context * cuda_c
+         CUDA_CHECK(cudaGraphExecDestroy(graph->instance));
+         graph->instance = nullptr;
+         CUDA_CHECK(cudaGraphInstantiate(&graph->instance, graph->graph, NULL, NULL, 0));
++        ggt_log("exec_update ctx=%p key=%p re-instantiated\n", (void *) cuda_ctx, (void *) graph_key.first_node);
+     } else {
+         GGML_ASSERT(stat == cudaSuccess);
+     }
+@@ -4136,7 +4279,7 @@ static int ggml_cuda_try_fuse(ggml_backend_cuda_context * cuda_ctx, ggml_cgraph
+     return 0;
+ }
+ 
+-static void ggml_cuda_graph_evaluate_and_capture(ggml_backend_cuda_context * cuda_ctx, ggml_cgraph * cgraph, const bool use_cuda_graph, const bool cuda_graph_update_required, const void * graph_key) {
++static void ggml_cuda_graph_evaluate_and_capture(ggml_backend_cuda_context * cuda_ctx, ggml_cgraph * cgraph, const bool use_cuda_graph, const bool cuda_graph_update_required, ggml_cuda_graph_key graph_key) {
+     bool graph_evaluated_or_captured = false;
+ 
+     // flag used to determine whether it is an integrated_gpu
+@@ -4470,6 +4613,10 @@ static void ggml_cuda_graph_evaluate_and_capture(ggml_backend_cuda_context * cud
+ #ifdef USE_CUDA_GRAPH
+         ggml_cuda_graph * graph = cuda_ctx->cuda_graph(graph_key);
+         if (use_cuda_graph && cuda_graph_update_required) { // End CUDA graph capture
++            ggt_log("capture_end ctx=%p key=%p shape=%llu nodes=%d old_graph=%p\n",
++                    (void *) cuda_ctx, (void *) graph_key.first_node, (unsigned long long) graph_key.shape,
++                    cgraph->n_nodes, (void *) graph->graph);
++
+             if (graph->graph != nullptr) {
+                 CUDA_CHECK(cudaGraphDestroy(graph->graph));
+                 graph->graph = nullptr;
+@@ -4491,11 +4638,15 @@ static void ggml_cuda_graph_evaluate_and_capture(ggml_backend_cuda_context * cud
+         ggml_cuda_graph * graph = cuda_ctx->cuda_graph(graph_key);
+         if (graph->instance == nullptr) { // Create executable graph from captured graph.
+             CUDA_CHECK(cudaGraphInstantiate(&graph->instance, graph->graph, NULL, NULL, 0));
++        ggt_log("instantiate ctx=%p key=%p instance=%p\n",
++                (void *) cuda_ctx, (void *) graph_key.first_node, (void *) graph->instance);
+         }
+         if (cuda_graph_update_required) { // Update graph executable
+             ggml_cuda_graph_update_executable(cuda_ctx, graph_key);
+         }
+         // Launch graph
++        ggt_log("launch ctx=%p key=%p instance=%p\n",
++                (void *) cuda_ctx, (void *) graph_key.first_node, (void *) graph->instance);
+         CUDA_CHECK(cudaGraphLaunch(graph->instance, cuda_ctx->stream()));
+ #else
+         GGML_UNUSED(graph_key);
+@@ -4511,7 +4662,7 @@ static void ggml_cuda_graph_evaluate_and_capture(ggml_backend_cuda_context * cud
+ }
+ 
+ #ifdef USE_CUDA_GRAPH
+-static bool ggml_cuda_graph_set_enabled(ggml_backend_cuda_context * cuda_ctx, const void * graph_key) {
++static bool ggml_cuda_graph_set_enabled(ggml_backend_cuda_context * cuda_ctx, ggml_cuda_graph_key graph_key) {
+     ggml_cuda_graph * graph = cuda_ctx->cuda_graph(graph_key);
+ 
+     if (graph->graph == nullptr) {
+@@ -4534,7 +4685,7 @@ static enum ggml_status ggml_backend_cuda_graph_compute(ggml_backend_t backend,
+ 
+     bool use_cuda_graph             = false;
+     bool cuda_graph_update_required = false;
+-    const void * graph_key = nullptr;
++    ggml_cuda_graph_key graph_key = { nullptr, 0 };
+ 
+ #ifdef USE_CUDA_GRAPH
+     graph_key = ggml_cuda_graph_get_key(cgraph);
+@@ -4567,6 +4718,11 @@ static enum ggml_status ggml_backend_cuda_graph_compute(ggml_backend_t backend,
+                     cuda_graph_update_required = graph->instance == nullptr;
+                 }
+             }
++
++            ggt_log("compute ctx=%p key=%p nodes=%d warmup=%d props_changed=%d -> use_graph=%d update=%d\n",
++            (void *) cuda_ctx, (void *) graph_key.first_node, cgraph->n_nodes,
++                    (int) graph->warmup_complete, (int) properties_changed,
++                    (int) use_cuda_graph, (int) cuda_graph_update_required);
+         }
+     }
+ #endif // USE_CUDA_GRAPH
+@@ -4578,6 +4734,9 @@ static enum ggml_status ggml_backend_cuda_graph_compute(ggml_backend_t backend,
+             ggml_cuda_lock_counter.fetch_add(1, std::memory_order_relaxed);
+         }
+ 
++    ggt_log("capture_begin ctx=%p key=%p shape=%llu nodes=%d\n",
++            (void *) cuda_ctx, (void *) graph_key.first_node, (unsigned long long) graph_key.shape, cgraph->n_nodes);
++
+         CUDA_CHECK(cudaStreamBeginCapture(cuda_ctx->stream(), cudaStreamCaptureModeRelaxed));
+     }
+ 
+@@ -4615,7 +4774,7 @@ static void ggml_backend_cuda_graph_optimize(ggml_backend_t backend, ggml_cgraph
+     ggml_backend_cuda_context * cuda_ctx = (ggml_backend_cuda_context *) backend->context;
+ 
+ #ifdef USE_CUDA_GRAPH
+-    const void * graph_key = ggml_cuda_graph_get_key(cgraph);
++    const ggml_cuda_graph_key graph_key = ggml_cuda_graph_get_key(cgraph);
+     const bool use_cuda_graph = ggml_cuda_graph_set_enabled(cuda_ctx, graph_key);
+ #else
+     const bool use_cuda_graph = false;
+diff --git a/src/models/qwen35.cpp b/src/models/qwen35.cpp
+index 2f143d367..58e24a9bf 100644
+--- a/src/models/qwen35.cpp
++++ b/src/models/qwen35.cpp
+@@ -41,14 +41,24 @@ void llama_model_qwen35::load_arch_tensors(llama_model_loader & ml) {
+     const int trunk_flags = mtp_only ? TENSOR_NOT_REQUIRED : 0;
+     int mtp_flags = !ml.load_mtp ? TENSOR_SKIP : 0;
+ 
++    int64_t n_vocab_out = n_vocab;
++    const ggml_tensor * d2t_meta = ml.get_tensor_meta("d2t");
++    if (mtp_only && d2t_meta) {
++        n_vocab_out = d2t_meta->ne[0];
++        d2t = create_tensor(tn(LLM_TENSOR_D2T), { n_vocab_out }, 0);
++        LLAMA_LOG_INFO("%s: QWEN35 MTP using d2t draft-vocab trim (n_vocab_out = %lld)\n",
++                __func__, (long long) n_vocab_out);
++    }
++
+     tok_embd = create_tensor(tn(LLM_TENSOR_TOKEN_EMBD, "weight"), { n_embd, n_vocab }, 0);
+ 
+     // output
+     output_norm = create_tensor(tn(LLM_TENSOR_OUTPUT_NORM, "weight"), { n_embd }, 0);
+-    output = create_tensor(tn(LLM_TENSOR_OUTPUT, "weight"), { n_embd, n_vocab }, TENSOR_NOT_REQUIRED);
++    output = create_tensor(tn(LLM_TENSOR_OUTPUT, "weight"), { n_embd, n_vocab_out }, TENSOR_NOT_REQUIRED);
+ 
+     // if output is NULL, init from the input tok embed
+     if (output == NULL) {
++        GGML_ASSERT(!d2t && "d2t draft-vocab trim requires output.weight");
+         output = create_tensor(tn(LLM_TENSOR_TOKEN_EMBD, "weight"), { n_embd, n_vocab }, TENSOR_DUPLICATED);
+     }
+ 
+@@ -766,6 +776,22 @@ llama_model_qwen35::graph_mtp::graph_mtp(const llama_model & model, const llm_gr
+     cur = build_lora_mm(head_w, cur, head_s);
+     cb(cur, "result_output", -1);
+ 
++    if (model.d2t) {
++        const int64_t n_draft_vocab = cur->ne[0];
++        const int64_t n_outputs     = cur->ne[1];
++        const int64_t n_vocab_full  = (int64_t) model.vocab.n_tokens();
++
++        GGML_ASSERT(model.d2t->ne[0] == n_draft_vocab);
++
++        ggml_tensor * logits = ggml_fill(ctx0,
++                ggml_new_tensor_3d(ctx0, GGML_TYPE_F32, 1, n_vocab_full, n_outputs), -INFINITY);
++        cur = ggml_set_rows(ctx0, logits,
++                ggml_reshape_3d(ctx0, cur,       1,             n_draft_vocab, n_outputs),
++                ggml_reshape_3d(ctx0, model.d2t, n_draft_vocab, 1,             1));
++        cur = ggml_reshape_2d(ctx0, cur, n_vocab_full, n_outputs);
++        cb(cur, "result_output_d2t", -1);
++    }
++
+     res->t_logits = cur;
+     ggml_build_forward_expand(gf, cur);
+ }

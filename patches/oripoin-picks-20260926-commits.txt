@@ -1,0 +1,14 @@
+9b98d9dfd local: drop the MoE weighted-reduction block that rode along with the GDN fusion pick
+a991440d1 cuda : fuse three node chains on the GDN path
+6dd041f49 local: GGML_MTP_KEEP_DRAFT_UBATCH escape hatch for the draft ubatch clamp
+4acdc0772 Revert "model : load hparams.n_layer_nextn before n_layer() calls (#28159)"
+8dfe8ec75 local: the draft ubatch clamp keeps the hybrid rollback window (n_max + 2 rows)
+023bf98a3 local: the tile q8 read addresses a dense KV cache (no pooled row map in this tree)
+6ae7cbeb8 cuda: read the q8_0 KV cache where it lies in the tile flash-attention kernel
+c1175dd6e cuda: narrow MMQ tile for Turing's 9..16-row Q8_0 matmuls
+553052586 cuda: give Turing's 5..8-row Q8_0 matmuls the MMQ path
+72934f175 cuda: budget the shared-memory attribute for both fallback variants of a tile
+437103f9c model : load hparams.n_layer_nextn before n_layer() calls (#28159)
+247495531 qwen35 : flatten the ssm_out activation for the MMVQ path
+7534ea65b speculative: size the MTP draft context's buffers by one step of drafts
+285da8f37 wip: local PQ2_0/MTP runtime patches (d2t + graph shapecache + instrumentation)
