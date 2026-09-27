@@ -1,14 +1,39 @@
-9b98d9dfd local: drop the MoE weighted-reduction block that rode along with the GDN fusion pick
-a991440d1 cuda : fuse three node chains on the GDN path
-6dd041f49 local: GGML_MTP_KEEP_DRAFT_UBATCH escape hatch for the draft ubatch clamp
-4acdc0772 Revert "model : load hparams.n_layer_nextn before n_layer() calls (#28159)"
-8dfe8ec75 local: the draft ubatch clamp keeps the hybrid rollback window (n_max + 2 rows)
-023bf98a3 local: the tile q8 read addresses a dense KV cache (no pooled row map in this tree)
-6ae7cbeb8 cuda: read the q8_0 KV cache where it lies in the tile flash-attention kernel
-c1175dd6e cuda: narrow MMQ tile for Turing's 9..16-row Q8_0 matmuls
-553052586 cuda: give Turing's 5..8-row Q8_0 matmuls the MMQ path
-72934f175 cuda: budget the shared-memory attribute for both fallback variants of a tile
-437103f9c model : load hparams.n_layer_nextn before n_layer() calls (#28159)
-247495531 qwen35 : flatten the ssm_out activation for the MMVQ path
-7534ea65b speculative: size the MTP draft context's buffers by one step of drafts
-285da8f37 wip: local PQ2_0/MTP runtime patches (d2t + graph shapecache + instrumentation)
+# 提交清单（842b18804 -> 2b6c36f69），与 patches/ 里的两个补丁一一对应
+#   patch 1 = oripoin-picks-20260926-full.patch：842b18804..9b98d9dfd
+#   patch 2 = local-patch-v100-20260927.patch：9b98d9dfd..2b6c36f69
+# 提示：437103f9c (#28159) 被随后的 4acdc0772 revert，净效果为零，保留仅为完整性。
+
+== patch 1 ==
+285da8f37 2026-09-26 05:33 wip: local PQ2_0/MTP runtime patches (d2t + graph shapecache + instrumentation)
+7534ea65b 2026-09-18 03:05 speculative: size the MTP draft context's buffers by one step of drafts
+247495531 2026-09-19 15:58 qwen35 : flatten the ssm_out activation for the MMVQ path
+437103f9c 2026-09-01 13:55 model : load hparams.n_layer_nextn before n_layer() calls (#28159)
+72934f175 2026-09-18 19:40 cuda: budget the shared-memory attribute for both fallback variants of a tile
+553052586 2026-09-18 00:58 cuda: give Turing's 5..8-row Q8_0 matmuls the MMQ path
+c1175dd6e 2026-09-18 19:40 cuda: narrow MMQ tile for Turing's 9..16-row Q8_0 matmuls
+6ae7cbeb8 2026-09-18 03:05 cuda: read the q8_0 KV cache where it lies in the tile flash-attention kernel
+023bf98a3 2026-09-26 05:56 local: the tile q8 read addresses a dense KV cache (no pooled row map in this tree)
+8dfe8ec75 2026-09-26 06:19 local: the draft ubatch clamp keeps the hybrid rollback window (n_max + 2 rows)
+4acdc0772 2026-09-26 06:29 Revert "model : load hparams.n_layer_nextn before n_layer() calls (#28159)"
+6dd041f49 2026-09-26 07:06 local: GGML_MTP_KEEP_DRAFT_UBATCH escape hatch for the draft ubatch clamp
+a991440d1 2026-09-25 09:50 cuda : fuse three node chains on the GDN path
+9b98d9dfd 2026-09-26 11:45 local: drop the MoE weighted-reduction block that rode along with the GDN fusion pick
+
+== patch 2 ==
+e60cd6fa7 2026-09-26 19:16 local: 4 columns/warp on Volta GDN when n_tokens >= 8 (+2.7% prefill)
+d5b463e13 2026-09-26 19:36 port(ada-bundle 0004/0014/0015/0017/0018/0020): MTP catch-up deferral + graph output rows + draft-depth-max + batch-invariant flag
+4d0a06e3c 2026-09-26 19:51 port(ada-bundle 0007): fold the recurrent-state gather into the GATED_DELTA_NET kernel
+bea69867f 2026-09-26 22:56 port(ada-bundle 0001/0002/0003/0010/0011/0013/0021/0022): PTQ1_0 planar-transposed mat-vec stack on sm_70
+5e36a7d40 2026-09-27 01:00 port(sm70-attn): D256 Split-D FlashAttention for Volta (+0.9..+8% prefill)
+b2b2c48fa 2026-09-27 09:14 fix(sm70-attn): q4-direct batch offset; hard-disable that path (measured wrong)
+9a7b871a1 2026-09-27 10:20 speculative(mtp): give the draft context a real micro-batch (+54% prefill with MTP)
+0de9b7f53 2026-09-27 13:46 port(volta-fa): retune hs=256 MMA config + fix np>1 barrier UB (WyvernTKC 028c1a96b, eca0bd8b9 == ggml-org#27955)
+c36eb84c7 2026-09-27 14:31 local(diag): GGML_PTQ1_1COL=pt|soa to A/B the PTQ1_0 one-column activation layout
+4a5ac08c4 2026-09-27 15:18 local(diag): GGML_FATTN_FORCE_VEC=1 to force the vector FA kernel on Volta
+7d1574344 2026-09-27 16:53 wip(sm70-d256-decode): q8_0 GQA-packed decode kernel + test harness (opt-in, numerically off by 0.06)
+ec1e1d155 2026-09-27 17:21 fix(sm70-d256-decode): mask the q8 bytes when packing Q (negative quants shifted sign bits into neighbours)
+85d79350d 2026-09-27 17:41 perf(sm70-d256-decode): two-pass per tile (lane==token scores, lane==dims V accumulate); 17.2 -> 26.1 t/s at 100K
+9624c8014 2026-09-27 17:50 test(sm70-prefill): prefill-shaped perf cases + note the random-mask harness mismatch
+8d465518d 2026-09-27 18:47 perf(sm70-d256-decode): 256 threads + fp16 V staging + gate to q_len == 1; wins 8-21% at nb=1 but is a wash in production
+dde616a5f 2026-09-27 19:40 feat(ptq1_0): fused small-m path (dp4a column chunks) -- 2.3-13.7x per matmul, but an end-to-end wash; opt-in
+2b6c36f69 2026-09-27 20:13 prof(decode): SPC_DECODE_PROF phase timers in process_ubatch and the decode prologue; the per-turn 457 ms is small-batch GPU idle, not host work

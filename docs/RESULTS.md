@@ -9,7 +9,7 @@
 
 | 指标 | 旧运行时 | picks 新版 | 变化 |
 |---|---|---|---|
-| 显存占用（ctx 131072，无 MTP） | 15,847 MiB | 13,97x MiB | **-1.9 GiB** |
+| 显存占用（ctx 131072） | 15,847 MiB（旧运行时） | 13,979 MiB（q8_0 KV + MTP，三档 ub 实测 13,952~13,980） | **-1.9 GiB** |
 | 预填充 12,067 tok 提示 | 175.8 t/s | **921.9 t/s** | **5.2×** |
 | 预填充 55,509 tok 提示 | 13.55 t/s | **681.1 t/s** | **50×** |
 | 生产配置下 12,084 tok 提示 | 175.8 t/s | **940.6 t/s** | **5.35×** |
@@ -29,8 +29,8 @@
 
 | sha | 标题 | 说明 |
 |---|---|---|
-| `2698c2e4` | speculative: size the MTP draft context's buffers by one step of drafts | draft 上下文的 ubatch 按「一步草稿」而不是目标 ubatch 分配 |
-| `eb331224e` | qwen35 : flatten the ssm_out activation for the MMVQ path | qwen35 SSM 路径的 3D→2D 展平 |
+| `7534ea65b` | speculative: size the MTP draft context's buffers by one step of drafts | draft 上下文的 ubatch 按「一步草稿」而不是目标 ubatch 分配 |
+| `247495531` | qwen35 : flatten the ssm_out activation for the MMVQ path | qwen35 SSM 路径的 3D→2D 展平 |
 | `72934f175` | cuda: budget the shared-memory attribute for both fallback variants of a tile | 共享内存属性修复（对 sm_70 是 no-op） |
 | `553052586` | cuda: give Turing's 5..8-row Q8_0 matmuls the MMQ path | 仅 sm_75 生效，sm_70 无影响 |
 | `c1175dd6e` | cuda: narrow MMQ tile for Turing's 9..16-row Q8_0 matmuls | 仅 sm_75 生效，sm_70 无影响 |
@@ -39,8 +39,9 @@
 | `8dfe8ec75` | local: draft ubatch 下限要保住混合模型的回滚窗口（n_max+2 行） | 本地适配 |
 | `6dd041f49` | local: `GGML_MTP_KEEP_DRAFT_UBATCH=1` 诊断开关 | 本地 |
 
-补丁全集：`work\patches\oripoin-picks-20260926-full.patch`（相对 842b18804，79 KB）
-提交清单：`work\patches\oripoin-picks-20260926-commits.txt`
+补丁全集：`patches/oripoin-picks-20260926-full.patch`（相对 842b18804，112 KB / 20 个文件）
+续接补丁：`patches/local-patch-v100-20260927.patch`（9b98d9dfd → 生产工作树，含 PTQ1_0/m70 D256/注册代码）
+提交清单：`patches/oripoin-picks-20260926-commits.txt`（已按真实历史重新生成）
 
 ## 三、被否掉的提交
 
@@ -116,7 +117,7 @@ draft 链本身还要多跑两遍，收益被摊掉。结论：**长上下文（
 
 | 指标 | 只有 tile q8（现行生产） | 再加 MMA q8 |
 |---|---|---|
-| 加载后显存 | ~13,96x MiB | 14,411 MiB（**+455 MiB**） |
+| 加载后显存 | ~13,9xx MiB（sweep 实测 13,952~13,980） | 14,411 MiB（**+455 MiB**） |
 | 预填充 12,067 tok | **921.9 t/s** | 900.5 t/s（−2.3%） |
 | 预填充 55,509 tok | **681.1 t/s** | 636.6 t/s（−6.5%） |
 | 明文解码 4 任务均值 | 45.75 t/s | 45.98 t/s（噪声内） |

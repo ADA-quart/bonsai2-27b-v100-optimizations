@@ -1,0 +1,9 @@
+* text=auto
+
+# keep the patch series byte-exact (no CRLF conversion on checkout)
+*.patch -text
+*.diff  -text
+
+# scripts stay runnable on the platform they target
+*.ps1 text eol=crlf
+*.sh  text eol=lf

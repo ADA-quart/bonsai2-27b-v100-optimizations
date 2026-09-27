@@ -23,7 +23,18 @@ import urllib.error
 import urllib.request
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-DEMO_DIR = r"<REPO>\work\bonsai-demo"
+def _cli_demo_dir():
+    """--demo-dir / BONSAI_DEMO_DIR, resolved before the derived paths below."""
+    for i, arg in enumerate(sys.argv):
+        if arg == "--demo-dir" and i + 1 < len(sys.argv):
+            return sys.argv[i + 1]
+        if arg.startswith("--demo-dir="):
+            return arg.split("=", 1)[1]
+    return os.environ.get("BONSAI_DEMO_DIR") or r"<REPO>\work\bonsai-demo"
+
+
+DEMO_DIR = _cli_demo_dir()
+
 SERVER_EXE = os.path.join(DEMO_DIR, "bin", "cuda", "llama-server.exe")
 CONFIG_PATH = os.path.join(DEMO_DIR, "dashboard-config.json")
 LOG_OUT = os.path.join(DEMO_DIR, "server.out.log")
@@ -2215,9 +2226,14 @@ def main():
     ap.add_argument("--port", type=int, default=8090)
     ap.add_argument("--host", default="127.0.0.1")
     ap.add_argument("--server-port", type=int, default=8080)
+    ap.add_argument("--demo-dir", default=DEMO_DIR,
+                    help="包含 bin/cuda/llama-server.exe、models/ 与 dashboard-config.json 的目录"
+                         "（也可用环境变量 BONSAI_DEMO_DIR）")
     args = ap.parse_args()
     SERVER_PORT = args.server_port
     UPSTREAM = f"http://127.0.0.1:{SERVER_PORT}"
+    if not os.path.exists(SERVER_EXE):
+        print(f"警告：找不到 {SERVER_EXE}；请用 --demo-dir 指向正确的 bonsai-demo 目录")
     seed_bench_from_history()
     threading.Thread(target=live_sampler, daemon=True).start()
     srv = ThreadingHTTPServer((args.host, args.port), Handler)
