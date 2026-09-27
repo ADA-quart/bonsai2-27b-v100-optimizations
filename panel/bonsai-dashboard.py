@@ -66,7 +66,7 @@ DEFAULT_CONFIG = {
     "presence_penalty": 0.0,
     "chat_template_file": "",
     "reasoning_budget": "",
-    "compact_tokens": 110000,
+    "compact_tokens": 100000,
     "kv_offload": True,
     "thinking": "on",
     "mmproj_cpu": False,
@@ -1268,7 +1268,7 @@ PAGE = r"""<!doctype html>
           极限 256K · q4_0（自动关 MTP）
         </button>
         <button type="button" id="agentPresetBtn" class="primary"
-          title="按多轮 agent 负载的实测形态定档：每轮上下文 p50 63K / p90 96K（集中在 32K~110K）→ 128K 窗口 + 110K 自动压缩；每轮新增只有 p50 ~500 token（p90 ~1.3K）、输出 p50 ~300 token、每轮 1 次工具调用 → 128K + q8_0（近无损且快）、batch 8192/ubatch 1024（实测 ub 512/1024/2048 在这种"多轮小增量"下 10 轮总耗时 47.3/44.3/45.1 s，无差别；而 128K 档 ub 2048 会贴显存，故取 1024）、并发 1（KV 前缀缓存必定命中）、MTP + 图形状缓存（解码 60.8 vs 关图 29.8 t/s）、关思考 + 256 预算、精确采样档 0.3/0.9/40/min_p 0.05/presence 0、视觉塔放内存、自动压缩 110K">
+          title="按多轮 agent 负载的实测形态定档：每轮上下文 p50 63K / p90 96K（集中在 32K~110K）→ 128K 窗口 + 100K 自动压缩（105~110K 是模型的退化区间）；每轮新增只有 p50 ~500 token（p90 ~1.3K）、输出 p50 ~300 token、每轮 1 次工具调用 → 128K + q8_0（近无损且快）、batch 8192/ubatch 1024（实测 ub 512/1024/2048 在这种"多轮小增量"下 10 轮总耗时 47.3/44.3/45.1 s，无差别；而 128K 档 ub 2048 会贴显存，故取 1024）、并发 1（KV 前缀缓存必定命中）、MTP + 图形状缓存（解码 60.8 vs 关图 29.8 t/s）、关思考 + 256 预算、精确采样档 0.3/0.9/40/min_p 0.05/presence 0、视觉塔放内存、自动压缩 100K">
           🤖 Agent 最优（实测调优）
         </button>
         <button type="button" id="shortMtpPresetBtn"
@@ -1414,7 +1414,7 @@ async function loadConfigForm() {
   $("cfgThreads").value = c.threads; $("cfgBatch").value = c.batch; $("cfgUbatch").value = c.ubatch;
   $("cfgTemp").value = c.temp; $("cfgTopp").value = c.top_p; $("cfgTopk").value = c.top_k;
   $("cfgMinp").value = c.min_p; $("cfgBudget").value = c.reasoning_budget;
-  $("cfgCompact").value = (c.compact_tokens === undefined || c.compact_tokens === null) ? 110000 : c.compact_tokens;
+  $("cfgCompact").value = (c.compact_tokens === undefined || c.compact_tokens === null) ? 100000 : c.compact_tokens;
   $("cfgPresence").value = (c.presence_penalty === undefined || c.presence_penalty === null) ? 0 : c.presence_penalty;
   $("cfgMmproj").checked = !!c.use_mmproj;
   $("cfgMmprojCpu").checked = !!c.mmproj_cpu;
@@ -1814,12 +1814,12 @@ $("agentPresetBtn").addEventListener("click", ()=>{
   $("cfgMmproj").checked = true; $("cfgMmprojCpu").checked = true;
   $("cfgKvOffload").checked = true; $("cfgKvBias").checked = false;
   $("cfgThinking").value = "off"; $("cfgBudget").value = 256;
-  $("cfgCompact").value = 110000;
+  $("cfgCompact").value = 100000;
   /* MTP：嫁接头（blk.64，ProCreations on-policy Q8）实测在本卡上 0/12K/24K/48K 深度
      解码分别 +26%/+27%/+31%/+22%，冷启动 prefill 多付 0.85 ms/token；前缀缓存不受影响，
      所以多轮会话开、一次性的超长冷提示可以临时勾掉。 */
   $("cfgSpec").checked = true; $("cfgSpecN").value = 2; $("cfgSpecDepth").value = 0;
-  $("cfgMsg").textContent = "已填入「Agent 最优」：128K + q8_0 + batch 8192/ubatch 1024（多轮对话最优；单发超长提示请手动改回 2048）+ 并发1 + 关思考(预算256) + 官方采样 + 视觉塔在内存 + 自动压缩 110K + MTP 草稿(嫁接头, depth 0) —— 点「应用并重载」生效";
+  $("cfgMsg").textContent = "已填入「Agent 最优」：128K + q8_0 + batch 8192/ubatch 1024（多轮对话最优；单发超长提示请手动改回 2048）+ 并发1 + 关思考(预算256) + 精确采样档(0.3/0.9/40/min_p 0.05/presence 0) + 视觉塔在内存 + 自动压缩 100K + MTP 草稿(嫁接头, depth 0) —— 点「应用并重载」生效";
 });
 
 $("benchBtn").addEventListener("click", async ()=>{
