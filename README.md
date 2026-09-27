@@ -30,7 +30,7 @@ patches/   1) oripoin-picks-20260926-full.patch   上游 842b18804 → 9b98d9dfd
            2) local-patch-v100-20260927.patch    9b98d9dfd → 生产工作树（PTQ1_0/m70 D256/注册/MTP 等）
            附：*-commits.txt 提交清单；single-feature/ 单点摘录（仅参考，勿叠加 apply）
 code/      新增/重写的内核（D256 prefill FA、解码原型、PTQ1_0 planar mat-vec）——与补丁 2 内容一致，供阅读
-           sm70-vendor/ 两个 BSD-3 许可文本 + 拉取说明（vendored 头文件本身不随仓库分发）
+           sm70-vendor/ 两个 BSD-3 许可文本 + 拉取说明；flash/ 的 7 个头文件随仓库分发（cute/cutlass 需自行拉取）
 panel/     自建控制台（实时 tok/s、首 token、显存拆分、GPU 温度/功耗、一键接入等）
 tools/     探针与基准脚本（prefill-probe、agent 轮次基准、阶段埋点、spec-bench、部署脚本）
 docs/      研究记录：逐项 A/B、被否证的方向、性能账本、优化前后对比
