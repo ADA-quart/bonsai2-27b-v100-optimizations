@@ -49,10 +49,11 @@ THIRD-PARTY-NOTICES.md + THIRD-PARTY-LICENSES/   上游与第三方许可清单�
 
    补丁 2 已包含三个内核源码及其注册代码（`fattn.cu` 的 D256 选择分支、`mmvq.cu` 的 PTQ1_0
    派发、`CMakeLists.txt` 的 include 守卫），所以不需要再手工拷贝 `code/`。
-3. **vendored 头文件**（只有 D256 prefill 内核需要）：按 `code/sm70-vendor/README.md` 把
-   CUTLASS@`62750a2b` 的 `cute/ + cutlass/` 与 flash-attention-v100@`c2eda5e6` 的 `flash/`
-   放进 `ggml/src/ggml-cuda/sm70-vendor/`。不想要这个内核就删掉
-   `fattn-sm70-d256*.cu`（或运行时设 `LLAMA_SM70_D256=0`）。
+3. **vendored 头文件**（只有 D256 prefill 内核需要）：按 `code/sm70-vendor/README.md`
+   ①把本仓库的 `code/sm70-vendor/flash/` 整个拷到 `ggml/src/ggml-cuda/sm70-vendor/flash/`
+   （其中 2 个文件带我们的移植补丁、1 个是上游 CMake 生成文件的替身，上游拿不到）；
+   ②再从 CUTLASS@`62750a2b` 取 `include/cute` 与 `include/cutlass` 放到同目录下。
+   不想要这个内核就删掉 `fattn-sm70-d256*.cu`（或运行时设 `LLAMA_SM70_D256=0`）。
 4. 构建（参考我们用的 sm_70 配置见 `tools/` 与 `docs/RESEARCH.md` §8）。
 5. 控制台：`python panel/bonsai-dashboard.py --port 8090 --server-port 8080 --demo-dir <你的 model 目录>`。
 6. 复现实验：`tools/` 里的脚本（`prefill-probe.py`、`agent-turn-bench.py`、
