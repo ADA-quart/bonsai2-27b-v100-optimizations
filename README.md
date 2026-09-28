@@ -39,7 +39,7 @@ code/      new/rewritten kernels (D256 prefill FA, decode prototype, PTQ1_0 plan
 panel/     the control panel (live tok/s, first token, VRAM breakdown, GPU temp/power, one-click setup, …)
 tools/     probes and benchmarks (prefill-probe, agent-turn bench, phase profiling, spec-bench, deploy script)
 docs/      research log: per-change A/Bs, rejected directions, performance ledger, before/after (Chinese)
-           BEFORE-AFTER.en.md is the English one-pager (BEFORE-AFTER.md is its Chinese original)
+           English versions: BEFORE-AFTER.en.md (one-pager) and TOOLS.en.md (script map)
 THIRD-PARTY-NOTICES.md + THIRD-PARTY-LICENSES/   upstream & third-party licence list and full texts
 ```
 
