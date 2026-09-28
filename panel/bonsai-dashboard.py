@@ -71,6 +71,10 @@ DEFAULT_CONFIG = {
     "dry_base": 1.75,
     "dry_allowed_length": 2,
     "dry_penalty_last_n": 64,
+    # DRY sequence breakers: the default ('\n', ':', '"', '*') resets the penalty at every
+    # newline, so a repeated multi-line tool call is not penalised; "none" removes that reset
+    # (stronger; it also penalises legitimate repetition inside code).
+    "dry_sequence_breaker": "",
     "chat_template_file": "",
     "reasoning_budget": "",
     "compact_tokens": 100000,
@@ -325,6 +329,9 @@ def build_args(cfg):
                  "--dry-base", str(cfg.get("dry_base") or 1.75),
                  "--dry-allowed-length", str(dry_len),
                  "--dry-penalty-last-n", str(dry_last_n)]
+        brk = str(cfg.get("dry_sequence_breaker") or "").strip()
+        if brk:
+            args += ["--dry-sequence-breaker", brk]
     tpl = str(cfg.get("chat_template_file") or "").strip()
     if tpl:
         if not os.path.isabs(tpl):
@@ -1265,6 +1272,10 @@ PAGE = r"""<!doctype html>
         <label class="wide"><input type="checkbox" id="cfgDry"> Enable DRY repeat suppression (fights "but wait / let me do" text loops; tool-call loops still need the protocol rules)</label>
         <label>DRY multiplier (0.5 mild / 0.8 recommended / 1.1 aggressive)<input id="cfgDryMult" type="number" step="0.1" min="0" max="2"></label>
         <label>DRY allowed length (repeat longer than N tokens before penalising)<input id="cfgDryLen" type="number" min="1" max="16"></label>
+        <label>DRY sequence breakers (the default resets the penalty at newlines/colons/quotes; "none" also penalises repeats that span lines)<select id="cfgDryBrk">
+          <option value="">default ('\n' : " *)</option>
+          <option value="none">none (stronger, spans lines)</option>
+        </select></label>
         <label class="wide"><input type="checkbox" id="cfgMmproj"> 启用视觉（mmproj）</label>
         <label class="wide"><input type="checkbox" id="cfgMmprojCpu"> 视觉塔放内存（省 ~0.9 GB 显存，只影响图片预填充）</label>
         <label class="wide"><input type="checkbox" id="cfgKvOffload"> KV 缓存放显存（--kv-offload，必须开才快）</label>
@@ -1412,6 +1423,9 @@ const I18N_EN = {
  "DRY multiplier（0.5 温和 / 0.8 推荐 / 1.1 激进）": "DRY multiplier (0.5 mild / 0.8 recommended / 1.1 aggressive)",
  "DRY allowed length（连续重复超过几个 token 才罚）": "DRY allowed length (penalise repeats longer than this many tokens)",
  "启用 DRY 防复读（压制 \"but wait / let me do\" 式重复输出；工具调用循环仍需协议规则）": "Enable DRY repeat suppression (fights \"but wait / let me do\" text loops; tool-call loops still need the protocol rules)",
+ "DRY 分隔符（默认在换行/冒号/引号处重置惩罚；选 none 连跨行重复也罚）": "DRY sequence breakers (the default resets the penalty at newlines/colons/quotes; \"none\" also penalises repeats that span lines)",
+ "默认（'\\n' : \" *）": "default ('\\n' : \" *)",
+ "none（更强，跨行重复也罚）": "none (stronger, spans lines)",
  "Bonsai 2 27B · 推理控制台": "Bonsai 2 27B · Inference Console",
  "输入消息…（Enter 发送，Shift+Enter 换行）": "Type a message… (Enter to send, Shift+Enter for a new line)",
  "注入「分析/推理/存疑」外显协议并关闭隐式思考（协议文本：work\\bonsai-reasoning-protocol.md）": "Injects the analyse/reason/doubt visible-analysis protocol and turns implicit thinking off (protocol text: work\\bonsai-reasoning-protocol.md)",
@@ -1640,6 +1654,9 @@ function setLang(lang) {
 
 
 
+
+
+
 const messagesEl = $("messages"), inputEl = $("input");
 let history = [], running = false, controller = null, samples = [], timer = null;
 let reloading = false;
@@ -1773,6 +1790,7 @@ async function loadConfigForm() {
   $("cfgDry").checked = Number(c.dry_multiplier || 0) > 0;
   $("cfgDryMult").value = (c.dry_multiplier === undefined || c.dry_multiplier === null) ? 0.8 : c.dry_multiplier;
   $("cfgDryLen").value = (c.dry_allowed_length === undefined || c.dry_allowed_length === null) ? 2 : c.dry_allowed_length;
+  $("cfgDryBrk").value = c.dry_sequence_breaker || "";
   $("cfgMmproj").checked = !!c.use_mmproj;
   $("cfgMmprojCpu").checked = !!c.mmproj_cpu;
   $("cfgKvOffload").checked = c.kv_offload !== false;
@@ -1802,6 +1820,7 @@ function collectConfig() {
     dry_base: 1.75,
     dry_allowed_length: parseInt($("cfgDryLen").value || "2", 10),
     dry_penalty_last_n: 64,
+    dry_sequence_breaker: $("cfgDryBrk").value,
     reasoning_budget: $("cfgBudget").value
     , compact_tokens: parseInt($("cfgCompact").value || "0", 10)
     , kv_offload: $("cfgKvOffload").checked
@@ -2205,6 +2224,8 @@ $("benchBtn").addEventListener("click", async ()=>{
   await loadConfigForm();
 })();
 drawSpark(); poll(); loadPrefs(); setInterval(poll, 1000); setInterval(loadConfigForm, 20000);
+
+
 
 
 
