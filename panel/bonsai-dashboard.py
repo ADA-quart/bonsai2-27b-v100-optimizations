@@ -64,6 +64,13 @@ DEFAULT_CONFIG = {
     "top_k": 20,
     "min_p": 0.0,
     "presence_penalty": 0.0,
+    # DRY sampler (repeat suppression): 0 = off. It fights *text* loops such as
+    # "but wait / let me do"; tool-call loops are handled by the anti-loop rules in
+    # the model instructions (see bonsai-reasoning-protocol.md, rule 8).
+    "dry_multiplier": 0.0,
+    "dry_base": 1.75,
+    "dry_allowed_length": 2,
+    "dry_penalty_last_n": 64,
     "chat_template_file": "",
     "reasoning_budget": "",
     "compact_tokens": 100000,
@@ -301,6 +308,23 @@ def build_args(cfg):
                 args += ["--no-mmproj-offload"]
     # 兼容补丁版对话模板：把客户端发的 high/ultra/minimal 等思考档映射到模型支持的
     # xhigh/medium/low，并容忍会话中途出现的 system/developer 消息（Codex 会这么发）
+    try:
+        dry = float(cfg.get("dry_multiplier") or 0)
+    except Exception:
+        dry = 0.0
+    if dry > 0:
+        try:
+            dry_len = max(1, min(16, int(float(cfg.get("dry_allowed_length") or 2))))
+        except Exception:
+            dry_len = 2
+        try:
+            dry_last_n = int(float(cfg.get("dry_penalty_last_n") or 64))
+        except Exception:
+            dry_last_n = 64
+        args += ["--dry-multiplier", f"{dry:g}",
+                 "--dry-base", str(cfg.get("dry_base") or 1.75),
+                 "--dry-allowed-length", str(dry_len),
+                 "--dry-penalty-last-n", str(dry_last_n)]
     tpl = str(cfg.get("chat_template_file") or "").strip()
     if tpl:
         if not os.path.isabs(tpl):
@@ -1235,6 +1259,9 @@ PAGE = r"""<!doctype html>
         <label>top_k<input id="cfgTopk" type="number" min="0"></label>
         <label>min_p<input id="cfgMinp" type="number" step="0.01" min="0" max="1"></label>
         <label>presence_penalty<input id="cfgPresence" type="number" step="0.05" min="0" max="2"></label>
+        <label class="wide"><input type="checkbox" id="cfgDry"> Enable DRY repeat suppression (fights "but wait / let me do" text loops; tool-call loops still need the protocol rules)</label>
+        <label>DRY multiplier (0.5 mild / 0.8 recommended / 1.1 aggressive)<input id="cfgDryMult" type="number" step="0.1" min="0" max="2"></label>
+        <label>DRY allowed length (repeat longer than N tokens before penalising)<input id="cfgDryLen" type="number" min="1" max="16"></label>
         <label class="wide"><input type="checkbox" id="cfgMmproj"> 启用视觉（mmproj）</label>
         <label class="wide"><input type="checkbox" id="cfgMmprojCpu"> 视觉塔放内存（省 ~0.9 GB 显存，只影响图片预填充）</label>
         <label class="wide"><input type="checkbox" id="cfgKvOffload"> KV 缓存放显存（--kv-offload，必须开才快）</label>
@@ -1416,6 +1443,9 @@ async function loadConfigForm() {
   $("cfgMinp").value = c.min_p; $("cfgBudget").value = c.reasoning_budget;
   $("cfgCompact").value = (c.compact_tokens === undefined || c.compact_tokens === null) ? 100000 : c.compact_tokens;
   $("cfgPresence").value = (c.presence_penalty === undefined || c.presence_penalty === null) ? 0 : c.presence_penalty;
+  $("cfgDry").checked = Number(c.dry_multiplier || 0) > 0;
+  $("cfgDryMult").value = (c.dry_multiplier === undefined || c.dry_multiplier === null) ? 0.8 : c.dry_multiplier;
+  $("cfgDryLen").value = (c.dry_allowed_length === undefined || c.dry_allowed_length === null) ? 2 : c.dry_allowed_length;
   $("cfgMmproj").checked = !!c.use_mmproj;
   $("cfgMmprojCpu").checked = !!c.mmproj_cpu;
   $("cfgKvOffload").checked = c.kv_offload !== false;
@@ -1441,6 +1471,10 @@ function collectConfig() {
     temp: parseFloat($("cfgTemp").value || "0.5"), top_p: parseFloat($("cfgTopp").value || "0.85"),
     top_k: parseInt($("cfgTopk").value || "20", 10), min_p: parseFloat($("cfgMinp").value || "0"),
     presence_penalty: parseFloat($("cfgPresence").value || "0"),
+    dry_multiplier: ($("cfgDry").checked ? parseFloat($("cfgDryMult").value || "0.8") : 0),
+    dry_base: 1.75,
+    dry_allowed_length: parseInt($("cfgDryLen").value || "2", 10),
+    dry_penalty_last_n: 64,
     reasoning_budget: $("cfgBudget").value
     , compact_tokens: parseInt($("cfgCompact").value || "0", 10)
     , kv_offload: $("cfgKvOffload").checked
@@ -1795,6 +1829,10 @@ $("shortMtpPresetBtn").addEventListener("click", ()=>{
   $("cfgCtx").value = 65536;
   $("cfgBatch").value = 8192; $("cfgUbatch").value = 2048;
   $("cfgSpec").checked = true; $("cfgSpecN").value = 2; $("cfgSpecDepth").value = 0;
+  /* DRY repeat suppression: 0.8 with allowed-length 2 is the usual llama.cpp setting;
+     drop it to 0.5 (or untick the box) if normal repeated structures in code get clipped. */
+  $("cfgDry").checked = true; $("cfgDryMult").value = 0.8; $("cfgDryLen").value = 2;
+  $("cfgDry").checked = true; $("cfgDryMult").value = 0.8; $("cfgDryLen").value = 2;
   $("cfgMsg").textContent = "已填入「短会话 · MTP 加速」：ctx 64K + ubatch 2048 + MTP 草稿长度 2（图形状缓存自动开）—— 点「应用并重载」生效。128K 长会话请用「🤖 Agent 最优」档（那一档也开 MTP）。";
 });
 
