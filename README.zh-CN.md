@@ -76,11 +76,17 @@ THIRD-PARTY-NOTICES.md + THIRD-PARTY-LICENSES/   上游与第三方许可清单�
 * 文档里的 `work\...` 路径是作者工作树的内部路径，保留作溯源用；脚本里的目录请按你的环境改。
 * 仓库里默认关闭的实验内核（`GGML_SM70_D256_DECODE`、`GGML_PTQ1_0_MULTI_CHUNK_MAX`、
   `SPC_DECODE_PROF` 等）只作记录，生产路径不启用。
-* **工具循环守卫**：`panel/bonsai-2-chat-template.jinja` 会统计"连续完全相同的工具调用"
+* **工具循环守卫**：`panel/bonsai-2-chat-template.jinja` 会统计“连续完全相同的工具调用”
   （同工具、同参数）；到 3 次就把一条警告追加进**最后一条工具输出**里（紧贴下一次 assistant
   生成），要求模型停止重复、换命令或直接作答，并列出它可用的工具名。实测：采样层的反重复
   （DRY，即使 `--dry-sequence-breaker none`）**压不住**工具调用循环（模型总得输出一个工具调用），
   而模板层的守卫能——3 次重复的对话里模型改用了别的工具，且服务器解析正常。
+* **本地模型接到 Codex 时的精简工具面**：「一键接入」会关闭全部插件（browser / docs / 表格 /
+  幻灯片 / 电脑操作…）、桌面注入的 `cua_repl` 与 `node_repl` MCP 服务、子代理工具和连接器应用，
+  只保留 shell / patch 等核心工具；对话模板里同时加入可直接照抄的调用示例。27B 模型在
+  “小而清晰”的工具集上选对工具的概率高得多——这从根源上消掉了“拿 `read_mcp_resource` 读本机
+  文件”这类死循环。字段按官方配置参考验证（`plugins.<plugin>.enabled`、
+  `mcp_servers.<id>.enabled`、`agents.enabled`）。在 CC Switch 里切回云端供应商时恢复完整工具面。
 * 详细的实验记录（`docs/`）目前是中文；本 README 与其结果表是英文，关键结论两边一致。
 
 ## 许可

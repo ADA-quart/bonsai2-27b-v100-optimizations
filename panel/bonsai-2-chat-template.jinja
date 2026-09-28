@@ -81,6 +81,17 @@
         {{- tool | tojson }}
     {%- endfor %}
     {{- "\n</tools>" }}
+    {{- '\n\n工具选择速查（本机固定规则，优先于你的直觉）：\n' }}
+    {{- '1) 读/写**本机文件**只用 exec_command（Get-Content / cat / rg / Get-ChildItem）或 apply_patch；' }}
+    {{- '如果工具列表里出现 read_mcp_resource / list_mcp_resources，它们只能访问 MCP 服务器自己暴露的资源（plugin:// 这类），**不能拿来读本机文件**。\n' }}
+    {{- '2) exec_command 返回 session_id 之后才可以用 write_stdin，而且只能用那个 id；进程已结束时不要再 write_stdin。\n' }}
+    {{- '3) 参数必须有实际内容：cmd / path / uri 之类留空会被直接拒绝。\n' }}
+    {{- '4) 同一个命令最多执行 2 次；输出为空就是结论（没有匹配 / 没有改动）；同一个工具失败 2 次就换工具，不要换着参数硬试。\n' }}
+    {{- '5) 本仓库的修改一律用 apply_patch（不要用 echo/重定向写文件）。\n' }}
+    {{- '6) 正确调用示例（照抄结构，只换真实路径）：读文件 → exec_command，cmd = Get-Content -Path "C:\\Projects\\itdc\\src\\diag.ts" -Encoding UTF8；' }}
+    {{- '搜索 → exec_command，cmd = rg -n "scheduler" C:\\Projects\\itdc\\src；找文件 → exec_command，cmd = rg --files C:\\Projects\\itdc；' }}
+    {{- '改文件 → apply_patch（*** Begin Patch ... *** End Patch）；看长驻进程 → 只有 exec_command 返回 session_id=123 且进程未结束时才 write_stdin（session_id = 123，chars = ""）。\n' }}
+    {{- '7) 禁止：空参数调用；用 MCP 资源工具读本机文件；对已结束的进程 write_stdin；同一命令第 3 次重试。\n' }}
     {{- '\n\nIf you choose to call a function ONLY reply in the following format with NO suffix:\n\n<tool_call>\n<function=example_function_name>\n<parameter=example_parameter_1>\nvalue_1\n</parameter>\n<parameter=example_parameter_2>\nThis is the value for the second parameter\nthat can span\nmultiple lines\n</parameter>\n</function>\n</tool_call>\n\n<IMPORTANT>\nReminder:\n- Function calls MUST follow the specified format: an inner <function=...></function> block must be nested within <tool_call></tool_call> XML tags\n- Required parameters MUST be specified\n- You may provide optional reasoning for your function call in natural language BEFORE the function call, but NOT after\n- If there is no function call available, answer the question like normal with your current knowledge and do not tell the user about function calls\n</IMPORTANT>' }}
     {%- if messages[0].role == 'system' %}
         {%- set content = render_content(messages[0].content, false, true)|trim %}

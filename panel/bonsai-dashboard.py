@@ -2280,6 +2280,118 @@ CATALOG_SCRIPT = os.path.join(WORK_DIR, "make-bonsai-catalog.py")
 ATTACH_BACKUP = os.path.join(WORK_DIR, "attach-backup")
 
 
+# --- 本地模型的 Codex 精简工具面：只留 exec_command / apply_patch 等核心工具 -----------
+# 27B 小模型在“全家桶”工具面里会误选 read_mcp_resource/write_stdin 并陷入循环；
+# 关掉插件、桌面注入的 MCP 服务（cua_repl/node_repl）、子代理与连接器即可根治。
+LEAN_PLUGIN_IDS = (
+    "browser@openai-bundled",
+    "visualize@openai-bundled",
+    "documents@openai-primary-runtime",
+    "pdf@openai-primary-runtime",
+    "spreadsheets@openai-primary-runtime",
+    "presentations@openai-primary-runtime",
+    "template-creator@openai-primary-runtime",
+    "codex-app-tools@openai-bundled",
+    "unified-computer-use@openai-bundled",
+    "chrome@openai-bundled",
+    "computer-use@openai-bundled",
+)
+CUA_RUNTIMES = os.path.join(os.environ.get("LOCALAPPDATA", ""),
+                            "OpenAI", "Codex", "runtimes", "cua_node")
+
+
+def _newest_runtime(*parts):
+    try:
+        best, best_mtime = None, -1.0
+        for name in os.listdir(CUA_RUNTIMES):
+            cand = os.path.join(CUA_RUNTIMES, name, *parts)
+            if os.path.isfile(cand):
+                mtime = os.path.getmtime(cand)
+                if mtime > best_mtime:
+                    best, best_mtime = cand, mtime
+        if best:
+            return best
+    except OSError:
+        pass
+    return parts[-1]
+
+
+def _section_bounds(lines, header):
+    start = None
+    for i, ln in enumerate(lines):
+        if ln.strip() == header:
+            start = i
+            break
+    if start is None:
+        return None, None
+    end = len(lines)
+    for j in range(start + 1, len(lines)):
+        s = lines[j].strip()
+        if s.startswith("[") and s.endswith("]"):
+            end = j
+            break
+    return start, end
+
+
+def _ensure_section_bool(text, header, key, value):
+    """按需写入 [section] key = value；段落不存在时自动补建。"""
+    text = text.rstrip("\n") + "\n"
+    lines = text.splitlines()
+    start, end = _section_bounds(lines, header)
+    if start is None:
+        return text + "\n%s\n%s = %s\n" % (header, key, value)
+    target = "%s = %s" % (key, value)
+    for i in range(start + 1, end):
+        if re.match(r"^\s*%s\s*=" % re.escape(key), lines[i]):
+            lines[i] = target
+            return "\n".join(lines) + "\n"
+    lines.insert(start + 1, target)
+    return "\n".join(lines) + "\n"
+
+
+def _ensure_mcp_disabled(text, name, command, args):
+    """把 cua_repl / node_repl 关掉；段落缺失时补一份带命令的完整定义。"""
+    header = "[mcp_servers.%s]" % name
+    args_toml = "[%s]" % ", ".join("'%s'" % a for a in args)
+    text = text.rstrip("\n") + "\n"
+    lines = text.splitlines()
+    start, end = _section_bounds(lines, header)
+    if start is None:
+        return text + ("\n%s\nenabled = false\ncommand = '%s'\nargs = %s\n"
+                       "startup_timeout_sec = 120\n" % (header, command, args_toml))
+    body = lines[start + 1:end]
+
+    def upsert(k, v):
+        for i, ln in enumerate(body):
+            if re.match(r"^\s*%s\s*=" % re.escape(k), ln):
+                body[i] = "%s = %s" % (k, v)
+                return
+        body.append("%s = %s" % (k, v))
+
+    upsert("enabled", "false")
+    if not any(re.match(r"^\s*command\s*=", ln) for ln in body):
+        upsert("command", "'%s'" % command)
+    if not any(re.match(r"^\s*args\s*=", ln) for ln in body):
+        upsert("args", args_toml)
+    lines[start + 1:end] = body
+    return "\n".join(lines) + "\n"
+
+
+def _lean_tool_profile(text):
+    """本地 27B 只接 Codex：砍掉插件、MCP 服务与子代理工具，减少误调用。"""
+    for plugin_id in LEAN_PLUGIN_IDS:
+        text = _ensure_section_bool(text, '[plugins."%s"]' % plugin_id, "enabled", "false")
+    text = _ensure_section_bool(text, "[agents]", "enabled", "false")
+    text = _ensure_section_bool(text, "[apps._default]", "enabled", "false")
+    text = _ensure_section_bool(text, "[features]", "js_repl", "false")
+    text = _ensure_mcp_disabled(
+        text, "cua_repl", _newest_runtime("bin", "node.exe"),
+        [_newest_runtime("bin", "node_modules", "@oai", "cua-repl", "bin", "cua-repl.mjs")])
+    text = _ensure_mcp_disabled(
+        text, "node_repl", _newest_runtime("bin", "node_repl.exe"), [])
+    return text
+
+
 def _run(cmd, timeout=180):
     """Run a command without popping a console window; return (rc, output)."""
     try:
@@ -2351,6 +2463,7 @@ def refresh_codex_config(ctx, compact=None):
             new = re.sub(r"(?m)^(model\s*=.*)$", r"\1\n" + line, new, count=1)
         else:
             new = line + "\n" + new
+    new = _lean_tool_profile(new)
     if new == text:
         return True, "config.toml 已是最新（无需改动）"
     os.makedirs(ATTACH_BACKUP, exist_ok=True)
@@ -2359,7 +2472,8 @@ def refresh_codex_config(ctx, compact=None):
     with open(CODEX_CONFIG, "w", encoding="utf-8", newline="\n") as fh:
         fh.write(new)
     extra = ("/ 自动压缩 %d " % int(compact)) if compact else ""
-    return True, ("已刷新：上下文 %d %s/ 模型目录 / 默认思考档（原文件备份在 work\\attach-backup）"
+    return True, ("已刷新：上下文 %d %s/ 模型目录 / 默认思考档 / 精简工具面（插件与 MCP 已关；"
+                  "原文件备份在 work\\attach-backup）"
                   % (int(ctx), extra))
 
 
