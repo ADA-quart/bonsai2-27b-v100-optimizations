@@ -35,7 +35,7 @@ code/      新增/重写的内核（D256 prefill FA、解码原型、PTQ1_0 plan
            sm70-vendor/ 两个 BSD-3 许可文本 + 拉取说明；flash/ 的 7 个头文件随仓库分发（cute/cutlass 需自行拉取）
 panel/     自建控制台（实时 tok/s、首 token、显存拆分、GPU 温度/功耗、一键接入等）
 tools/     探针与基准脚本（prefill-probe、agent 轮次基准、阶段埋点、spec-bench、部署脚本）
-docs/      研究记录：逐项 A/B、被否证的方向、性能账本、优化前后对比
+docs/      研究记录：逐项 A/B、被否证的方向、性能账本、优化前后对比（一页纸有英文版 BEFORE-AFTER.en.md）
 THIRD-PARTY-NOTICES.md + THIRD-PARTY-LICENSES/   上游与第三方许可清单与许可正文
 ```
 
