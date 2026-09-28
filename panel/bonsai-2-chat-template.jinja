@@ -70,7 +70,40 @@
         {%- endif %}
     {%- endif %}
 {%- endif %}
-{%- if tools and tools is iterable and tools is not mapping %}
+{#- 提前判定“强制停用工具”：连续 5 次完全相同的调用，或单轮 ≥24 次调用。命中后本轮不再渲染
+    <tools> 块——模型根本看不到工具定义，比单纯注入警告硬得多。 -#}
+{%- set early = namespace(sig='', run=0, total=0, hard=false) %}
+{%- set eqns = namespace(multi_step_tool=true, last_query_index=messages|length - 1) %}
+{%- for message in messages[::-1] %}
+    {%- set index = (messages|length - 1) - loop.index0 %}
+    {%- if eqns.multi_step_tool and message.role == "user" %}
+        {%- set content = render_content(message.content, false)|trim %}
+        {%- if not(content.startswith('<tool_response>') and content.endswith('</tool_response>')) %}
+            {%- set eqns.multi_step_tool = false %}
+            {%- set eqns.last_query_index = index %}
+        {%- endif %}
+    {%- endif %}
+{%- endfor %}
+{%- for m in messages %}
+    {%- if m.role == 'assistant' and m.tool_calls is defined and m.tool_calls is iterable and m.tool_calls is not mapping and m.tool_calls|length > 0 %}
+        {%- set tc = m.tool_calls[0] %}
+        {%- set fn = tc.function if tc.function is defined else tc %}
+        {%- set gsig = (fn.name|string) + '|' + (fn.arguments|tojson) %}
+        {%- if loop.index0 > eqns.last_query_index %}
+            {%- set early.total = early.total + 1 %}
+        {%- endif %}
+        {%- if gsig == early.sig %}
+            {%- set early.run = early.run + 1 %}
+        {%- else %}
+            {%- set early.sig = gsig %}
+            {%- set early.run = 1 %}
+        {%- endif %}
+    {%- endif %}
+{%- endfor %}
+{%- if early.run >= 5 or early.total >= 24 %}
+    {%- set early.hard = true %}
+{%- endif %}
+{%- if tools and tools is iterable and tools is not mapping and not early.hard %}
     {{- '<|im_start|>system\n' }}
     {%- if reasoning_instructions %}
         {{- reasoning_instructions + '\n\n' }}
@@ -106,7 +139,7 @@
     {%- if messages[0].role == 'system' %}
         {%- set content = render_content(messages[0].content, false, true)|trim %}
         {%- if content %}
-            {{- '<|im_start|>system\n' + (reasoning_instructions + '\n\n' if reasoning_instructions else '')  + content + '<|im_end|>\n' }}
+            {{- '<|im_start|>system\n' + (reasoning_instructions + '\n\n' if reasoning_instructions else '') + ('【工具已强制停用】本轮上下文里没有任何工具定义。禁止输出 <tool_call> / <function= / <parameter= 之类的调用文本，也不要在正文里模拟工具调用。直接用文字给出：已完成什么、当前结论、还卡在哪里。\n\n' if early.hard else '') + content + '<|im_end|>\n' }}
         {%- elif reasoning_instructions %}
             {{- '<|im_start|>system\n' + reasoning_instructions + '<|im_end|>\n' }}
         {%- endif %}
@@ -162,7 +195,9 @@
         {%- set guard.last_out = mtext[:160] %}
     {%- endif %}
 {%- endfor %}
-{%- if guard.total >= 20 %}
+{%- if early.hard %}
+    {%- set guard.note = '\n\n[系统·强制停用工具] 检测到你连续重复调用工具（最后一次：' + guard.tool + '）。**本轮工具定义已从上下文里移除**，禁止再输出任何工具调用（不要写 <tool_call> / <function= / <parameter=）。直接用文字给出结论、进展或卡点；重复调用不会再被执行。' %}
+{%- elif guard.total >= 20 %}
     {%- set guard.note = '\n\n[系统·流程守卫] 你本轮已经调用了 ' + (guard.total|string) + ' 次工具，但没有收敛。**现在禁止再调用任何工具**：用已有信息直接给出结论、完成修改汇报，或者说明卡在哪里。继续调用工具会被视为死循环。' %}
 {%- elif guard.tool in ('list_mcp_resources', 'read_mcp_resource', 'list_mcp_resource_templates') %}
     {%- set guard.note = '\n\n[系统·流程守卫] 你刚才调用了 ' + guard.tool + '。**本机没有配置任何 MCP 服务器**，这些 MCP 资源工具永远返回错误或空结果。**禁止再调用 list_mcp_resources / list_mcp_resource_templates / read_mcp_resource**；读本机文件请用 exec_command（Get-Content / cat / rg），然后继续任务。' %}

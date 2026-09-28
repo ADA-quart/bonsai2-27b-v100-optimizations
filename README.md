@@ -104,8 +104,12 @@ THIRD-PARTY-NOTICES.md + THIRD-PARTY-LICENSES/   upstream & third-party licence 
   read local files. Field names verified against the official config reference
   (`plugins.<plugin>.enabled`, `mcp_servers.<id>.enabled`, `features.goals`, `tools.view_image`,
   `agents.enabled`). The upstream harness still sends the three generic MCP *resource* tools even
-  with no server configured (openai/codex#11049), so the template hard-bans them and the guard now
-  fires on any MCP-resource call, on goal-tool calls, and at 12/20 tool calls in one turn.
+  with no server configured (openai/codex#11049), so the template hard-bans them and the guard
+  fires on any MCP-resource call, on goal-tool calls, at 12 tool calls (warning) and at 20 (stop).
+  As a hard circuit breaker, 5 identical calls or 24 calls in one turn make the template drop the
+  `<tools>` block entirely — the model literally has no tool definitions left and must answer in
+  text. A panel watchdog also re-asserts the profile in `config.toml` every 5 s, because CC Switch
+  drops the MCP-disable sections when it re-captures a provider entry on switch-away.
   Switching back to a cloud provider in CC Switch restores the full tool set.
 * **Language**: the detailed research notes under `docs/` are written in Chinese; this README and
   its result tables are in English, and the key conclusions match.

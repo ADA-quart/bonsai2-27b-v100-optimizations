@@ -89,7 +89,10 @@ THIRD-PARTY-NOTICES.md + THIRD-PARTY-LICENSES/   上游与第三方许可清单�
   （`plugins.<plugin>.enabled`、`mcp_servers.<id>.enabled`、`features.goals`、
   `tools.view_image`、`agents.enabled`）。上游仍会在没有 MCP 服务器时下发三个通用 MCP 资源工具
   （openai/codex#11049），所以模板里直接禁用它们，守卫也会在出现 MCP 资源调用、goal 调用、
-  以及单轮 12/20 次工具调用时介入。在 CC Switch 里切回云端供应商时恢复完整工具面。
+  单轮 12 次（警告）和 20 次（停止）工具调用时介入。真正兜底的是一条硬熔断：连续 5 次完全相同
+  的调用、或单轮 24 次调用时，模板直接不再渲染 `<tools>` 块——模型手里没有任何工具定义，只能
+  用文字作答。面板还有一个守护线程每 5 秒把精简工具面写回 `config.toml`，因为 CC Switch 在切换
+  供应商时会把它存档里的 MCP 禁用段丢掉。在 CC Switch 里切回云端供应商时恢复完整工具面。
 * 详细的实验记录（`docs/`）目前是中文；本 README 与其结果表是英文，关键结论两边一致。
 
 ## 许可

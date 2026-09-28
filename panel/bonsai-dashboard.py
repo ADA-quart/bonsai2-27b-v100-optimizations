@@ -2396,6 +2396,33 @@ def _lean_tool_profile(text):
     return text
 
 
+_LEAN_WATCH = {"backup_at": 0.0}
+
+
+def lean_watchdog(interval=5.0):
+    """CC Switch 切换时会用它的存档重写 config.toml，可能把 MCP 禁用段丢掉；
+    只要配置还指向本地服务，就持续把精简工具面补回去（写入前限频备份）。"""
+    while True:
+        try:
+            if os.path.exists(CODEX_CONFIG):
+                with open(CODEX_CONFIG, "r", encoding="utf-8") as fh:
+                    text = fh.read()
+                if ("127.0.0.1:%d" % SERVER_PORT) in text:
+                    new = _lean_tool_profile(text)
+                    if new != text:
+                        now = time.time()
+                        if now - _LEAN_WATCH["backup_at"] >= 120:
+                            _LEAN_WATCH["backup_at"] = now
+                            os.makedirs(ATTACH_BACKUP, exist_ok=True)
+                            shutil.copy2(CODEX_CONFIG, os.path.join(
+                                ATTACH_BACKUP, "config-%s.toml" % time.strftime("%Y%m%d-%H%M%S")))
+                        with open(CODEX_CONFIG, "w", encoding="utf-8", newline="\n") as fh:
+                            fh.write(new)
+        except Exception:
+            pass
+        time.sleep(interval)
+
+
 def _run(cmd, timeout=180):
     """Run a command without popping a console window; return (rc, output)."""
     try:
@@ -2778,6 +2805,7 @@ def main():
         print(f"警告：找不到 {SERVER_EXE}；请用 --demo-dir 指向正确的 bonsai-demo 目录")
     seed_bench_from_history()
     threading.Thread(target=live_sampler, daemon=True).start()
+    threading.Thread(target=lean_watchdog, daemon=True).start()
     srv = ThreadingHTTPServer((args.host, args.port), Handler)
     print(f"Bonsai 控制台： http://{args.host}:{args.port}    （llama-server: {UPSTREAM}）")
     srv.serve_forever()
