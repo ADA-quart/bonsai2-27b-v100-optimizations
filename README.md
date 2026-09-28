@@ -97,13 +97,16 @@ THIRD-PARTY-NOTICES.md + THIRD-PARTY-LICENSES/   upstream & third-party licence 
   switched to a different tool instead of repeating, and the server kept parsing the call.
 * **Lean tool profile when the local model drives Codex**: the "One-click connect" action
   disables every plugin (browser / docs / sheets / slides / computer use / …), the
-  desktop-injected `cua_repl` and `node_repl` MCP servers, sub-agent tools and connector apps,
-  leaving only the core shell/patch tools, and the chat template now carries copy-ready call
-  examples. A 27B model picks tools far more reliably from a small, distinct set — this removes
-  the root cause behind loops such as using `read_mcp_resource` to read local files. Field names
-  verified against the official config reference (`plugins.<plugin>.enabled`,
-  `mcp_servers.<id>.enabled`, `agents.enabled`). Switching back to a cloud provider in CC Switch
-  restores the full tool set.
+  desktop-injected `cua_repl` and `node_repl` MCP servers, goal tools, `view_image`, sub-agent
+  tools and connector apps, leaving only the core shell/patch tools, and the chat template now
+  carries copy-ready call examples. A 27B model picks tools far more reliably from a small,
+  distinct set — this removes the root cause behind loops such as using `read_mcp_resource` to
+  read local files. Field names verified against the official config reference
+  (`plugins.<plugin>.enabled`, `mcp_servers.<id>.enabled`, `features.goals`, `tools.view_image`,
+  `agents.enabled`). The upstream harness still sends the three generic MCP *resource* tools even
+  with no server configured (openai/codex#11049), so the template hard-bans them and the guard now
+  fires on any MCP-resource call, on goal-tool calls, and at 12/20 tool calls in one turn.
+  Switching back to a cloud provider in CC Switch restores the full tool set.
 * **Language**: the detailed research notes under `docs/` are written in Chinese; this README and
   its result tables are in English, and the key conclusions match.
 

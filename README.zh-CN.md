@@ -82,11 +82,14 @@ THIRD-PARTY-NOTICES.md + THIRD-PARTY-LICENSES/   上游与第三方许可清单�
   （DRY，即使 `--dry-sequence-breaker none`）**压不住**工具调用循环（模型总得输出一个工具调用），
   而模板层的守卫能——3 次重复的对话里模型改用了别的工具，且服务器解析正常。
 * **本地模型接到 Codex 时的精简工具面**：「一键接入」会关闭全部插件（browser / docs / 表格 /
-  幻灯片 / 电脑操作…）、桌面注入的 `cua_repl` 与 `node_repl` MCP 服务、子代理工具和连接器应用，
-  只保留 shell / patch 等核心工具；对话模板里同时加入可直接照抄的调用示例。27B 模型在
-  “小而清晰”的工具集上选对工具的概率高得多——这从根源上消掉了“拿 `read_mcp_resource` 读本机
-  文件”这类死循环。字段按官方配置参考验证（`plugins.<plugin>.enabled`、
-  `mcp_servers.<id>.enabled`、`agents.enabled`）。在 CC Switch 里切回云端供应商时恢复完整工具面。
+  幻灯片 / 电脑操作…）、桌面注入的 `cua_repl` 与 `node_repl` MCP 服务、目标（goal）工具、
+  `view_image`、子代理工具和连接器应用，只保留 shell / patch 等核心工具；对话模板里同时加入
+  可直接照抄的调用示例。27B 模型在“小而清晰”的工具集上选对工具的概率高得多——这从根源上消掉了
+  “拿 `read_mcp_resource` 读本机文件”这类死循环。字段按官方配置参考验证
+  （`plugins.<plugin>.enabled`、`mcp_servers.<id>.enabled`、`features.goals`、
+  `tools.view_image`、`agents.enabled`）。上游仍会在没有 MCP 服务器时下发三个通用 MCP 资源工具
+  （openai/codex#11049），所以模板里直接禁用它们，守卫也会在出现 MCP 资源调用、goal 调用、
+  以及单轮 12/20 次工具调用时介入。在 CC Switch 里切回云端供应商时恢复完整工具面。
 * 详细的实验记录（`docs/`）目前是中文；本 README 与其结果表是英文，关键结论两边一致。
 
 ## 许可

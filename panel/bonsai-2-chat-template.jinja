@@ -91,7 +91,9 @@
     {{- '6) 正确调用示例（照抄结构，只换真实路径）：读文件 → exec_command，cmd = Get-Content -Path "C:\\Projects\\itdc\\src\\diag.ts" -Encoding UTF8；' }}
     {{- '搜索 → exec_command，cmd = rg -n "scheduler" C:\\Projects\\itdc\\src；找文件 → exec_command，cmd = rg --files C:\\Projects\\itdc；' }}
     {{- '改文件 → apply_patch（*** Begin Patch ... *** End Patch）；看长驻进程 → 只有 exec_command 返回 session_id=123 且进程未结束时才 write_stdin（session_id = 123，chars = ""）。\n' }}
-    {{- '7) 禁止：空参数调用；用 MCP 资源工具读本机文件；对已结束的进程 write_stdin；同一命令第 3 次重试。\n' }}
+    {{- '7) 禁止：空参数调用；调用 list_mcp_resources / list_mcp_resource_templates / read_mcp_resource（本机没有 MCP 服务，必定失败）；' }}
+    {{- '调用 create_goal / get_goal / update_goal（本会话禁用目标管理）；调用 view_image（除非用户当轮明确附了图片，且路径必须原样来自用户消息，禁止自己编造文件名）；' }}
+    {{- '对已结束的进程 write_stdin；同一命令第 3 次重试。\n' }}
     {{- '\n\nIf you choose to call a function ONLY reply in the following format with NO suffix:\n\n<tool_call>\n<function=example_function_name>\n<parameter=example_parameter_1>\nvalue_1\n</parameter>\n<parameter=example_parameter_2>\nThis is the value for the second parameter\nthat can span\nmultiple lines\n</parameter>\n</function>\n</tool_call>\n\n<IMPORTANT>\nReminder:\n- Function calls MUST follow the specified format: an inner <function=...></function> block must be nested within <tool_call></tool_call> XML tags\n- Required parameters MUST be specified\n- You may provide optional reasoning for your function call in natural language BEFORE the function call, but NOT after\n- If there is no function call available, answer the question like normal with your current knowledge and do not tell the user about function calls\n</IMPORTANT>' }}
     {%- if messages[0].role == 'system' %}
         {%- set content = render_content(messages[0].content, false, true)|trim %}
@@ -128,13 +130,16 @@
 {%- endif %}
 {#- 循环检测：统计"连续完全相同的工具调用"次数；≥3 次时把警告塞进**最后一条消息**（工具输出或用户消息）
     里——位置紧贴生成点（注意力最高），同时不新增消息、不破坏服务器的 peg-native 解析。 -#}
-{%- set guard = namespace(run=0, sig='', tool='', note='', same_tool=0, last_fail=false, last_out='', fidx=0) %}
+{%- set guard = namespace(run=0, sig='', tool='', note='', same_tool=0, last_fail=false, last_out='', fidx=0, total=0) %}
 {%- for m in messages %}
     {%- if m.role == 'assistant' and m.tool_calls is defined and m.tool_calls is iterable and m.tool_calls is not mapping and m.tool_calls|length > 0 %}
         {%- set tc = m.tool_calls[0] %}
         {%- set fn = tc.function if tc.function is defined else tc %}
         {%- set gname = fn.name|string %}
         {%- set gsig = (fn.name|string) + '|' + (fn.arguments|tojson) %}
+        {%- if loop.index0 > ns.last_query_index %}
+            {%- set guard.total = guard.total + 1 %}
+        {%- endif %}
         {%- if gsig == guard.sig %}
             {%- set guard.run = guard.run + 1 %}
         {%- else %}
@@ -157,7 +162,13 @@
         {%- set guard.last_out = mtext[:160] %}
     {%- endif %}
 {%- endfor %}
-{%- if guard.run >= 3 %}
+{%- if guard.total >= 20 %}
+    {%- set guard.note = '\n\n[系统·流程守卫] 你本轮已经调用了 ' + (guard.total|string) + ' 次工具，但没有收敛。**现在禁止再调用任何工具**：用已有信息直接给出结论、完成修改汇报，或者说明卡在哪里。继续调用工具会被视为死循环。' %}
+{%- elif guard.tool in ('list_mcp_resources', 'read_mcp_resource', 'list_mcp_resource_templates') %}
+    {%- set guard.note = '\n\n[系统·流程守卫] 你刚才调用了 ' + guard.tool + '。**本机没有配置任何 MCP 服务器**，这些 MCP 资源工具永远返回错误或空结果。**禁止再调用 list_mcp_resources / list_mcp_resource_templates / read_mcp_resource**；读本机文件请用 exec_command（Get-Content / cat / rg），然后继续任务。' %}
+{%- elif guard.tool in ('create_goal', 'get_goal', 'update_goal') %}
+    {%- set guard.note = '\n\n[系统·流程守卫] 你刚才调用了 ' + guard.tool + '。**本会话不允许创建或管理目标（goal）**，这些工具已被禁用。不要再调用任何 goal 工具，直接继续当前任务：要么给出结论，要么做下一步需要做的事。' %}
+{%- elif guard.run >= 3 %}
     {%- set tnames = namespace(list='') %}
     {%- if tools is defined and tools is iterable and tools is not mapping %}
         {%- for t in tools %}
@@ -175,6 +186,8 @@
         {%- endfor %}
     {%- endif %}
     {%- set guard.note = '\n\n[系统·循环检测] 你已经连续 ' + (guard.same_tool|string) + ' 次调用同一个工具（' + guard.tool + '），而且**每次都失败**（最近一次输出：' + guard.last_out + '）。**禁止再用这个工具重试**：读本地文件请用 exec_command（Get-Content / cat / rg），MCP 的资源工具（list_mcp_resources / read_mcp_resource）只能用于 MCP 服务器自己暴露的资源，不能拿来读本机文件。要么换工具/换命令，要么直接说明卡在哪、需要用户做什么。' + ('（可用工具：' + (tnames2.list|trim) + '）' if tnames2.list|trim else '') %}
+{%- elif guard.total >= 12 %}
+    {%- set guard.note = '\n\n[系统·流程守卫] 你本轮已经调用了 ' + (guard.total|string) + ' 次工具。停下来检查：如果已有足够信息，**直接作答**；如果还差一步，只允许再调用 1 次最必要的命令，然后必须给出结论。' %}
 {%- endif %}
 {%- for message in messages %}
     {%- set content = render_content(message.content, true)|trim %}

@@ -2384,6 +2384,10 @@ def _lean_tool_profile(text):
     text = _ensure_section_bool(text, "[agents]", "enabled", "false")
     text = _ensure_section_bool(text, "[apps._default]", "enabled", "false")
     text = _ensure_section_bool(text, "[features]", "js_repl", "false")
+    text = _ensure_section_bool(text, "[features]", "goals", "false")
+    text = _ensure_section_bool(text, "[features]", "multi_agent", "false")
+    text = _ensure_section_bool(text, "[features]", "apps", "false")
+    text = _ensure_section_bool(text, "[features]", "view_image", "false")
     text = _ensure_mcp_disabled(
         text, "cua_repl", _newest_runtime("bin", "node.exe"),
         [_newest_runtime("bin", "node_modules", "@oai", "cua-repl", "bin", "cua-repl.mjs")])
