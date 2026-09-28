@@ -117,19 +117,33 @@
 {%- endif %}
 {#- 循环检测：统计"连续完全相同的工具调用"次数；≥3 次时把警告塞进**最后一条消息**（工具输出或用户消息）
     里——位置紧贴生成点（注意力最高），同时不新增消息、不破坏服务器的 peg-native 解析。 -#}
-{%- set guard = namespace(run=0, sig='', tool='', note='') %}
+{%- set guard = namespace(run=0, sig='', tool='', note='', same_tool=0, last_fail=false, last_out='', fidx=0) %}
 {%- for m in messages %}
     {%- if m.role == 'assistant' and m.tool_calls is defined and m.tool_calls is iterable and m.tool_calls is not mapping and m.tool_calls|length > 0 %}
         {%- set tc = m.tool_calls[0] %}
         {%- set fn = tc.function if tc.function is defined else tc %}
+        {%- set gname = fn.name|string %}
         {%- set gsig = (fn.name|string) + '|' + (fn.arguments|tojson) %}
         {%- if gsig == guard.sig %}
             {%- set guard.run = guard.run + 1 %}
         {%- else %}
             {%- set guard.sig = gsig %}
             {%- set guard.run = 1 %}
-            {%- set guard.tool = fn.name|string %}
+            {%- set guard.tool = gname %}
         {%- endif %}
+        {#- 同名工具连续调用计数（不看参数）：用来抓"参数写坏 / 换着参数重试"的失败循环 -#}
+        {%- if gname == guard.tool %}
+            {%- set guard.same_tool = guard.same_tool + 1 %}
+        {%- else %}
+            {%- set guard.same_tool = 1 %}
+            {%- set guard.tool = gname %}
+            {%- set guard.sig = gsig %}
+            {%- set guard.run = 1 %}
+        {%- endif %}
+    {%- elif m.role == 'tool' %}
+        {%- set mtext = (render_content(m.content, false)|trim)|lower %}
+        {%- set guard.last_fail = ('failed' in mtext) or ('error' in mtext) or ('unknown' in mtext) or ('invalid' in mtext) or ('denied' in mtext) or ('cannot' in mtext) %}
+        {%- set guard.last_out = mtext[:160] %}
     {%- endif %}
 {%- endfor %}
 {%- if guard.run >= 3 %}
@@ -141,6 +155,15 @@
         {%- endfor %}
     {%- endif %}
     {%- set guard.note = '\n\n[系统·循环检测] 你已经连续 ' + (guard.run|string) + ' 次发出**完全相同**的工具调用（' + guard.tool + '，参数一模一样）。这一轮**禁止再调用它**：直接基于上面的输出给出结论或修改文件，或者改用不同的命令' + ('（可用工具：' + (tnames.list|trim) + '）' if tnames.list|trim else '') + '。重复同一个调用会被视为卡死。' %}
+{%- elif guard.same_tool >= 3 and guard.last_fail %}
+    {%- set tnames2 = namespace(list='') %}
+    {%- if tools is defined and tools is iterable and tools is not mapping %}
+        {%- for t in tools %}
+            {%- set tname2 = t.function.name if t.function is defined else t.name|default('') %}
+            {%- set tnames2.list = tnames2.list + (tname2|string) + ' ' %}
+        {%- endfor %}
+    {%- endif %}
+    {%- set guard.note = '\n\n[系统·循环检测] 你已经连续 ' + (guard.same_tool|string) + ' 次调用同一个工具（' + guard.tool + '），而且**每次都失败**（最近一次输出：' + guard.last_out + '）。**禁止再用这个工具重试**：读本地文件请用 exec_command（Get-Content / cat / rg），MCP 的资源工具（list_mcp_resources / read_mcp_resource）只能用于 MCP 服务器自己暴露的资源，不能拿来读本机文件。要么换工具/换命令，要么直接说明卡在哪、需要用户做什么。' + ('（可用工具：' + (tnames2.list|trim) + '）' if tnames2.list|trim else '') %}
 {%- endif %}
 {%- for message in messages %}
     {%- set content = render_content(message.content, true)|trim %}
