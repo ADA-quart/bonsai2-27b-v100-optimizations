@@ -7,6 +7,10 @@ q8_0 KV cache, MTP speculative decoding) on a **Tesla V100-SXM2-16GB (sm_70, Win
 from "long prompts collapse" to "usable and close to the hardware limit". Patches, kernel sources,
 a control panel and every measurement are included.
 
+> ⚠️ **Warning**: using this model as a Codex agent will most likely fall into infinite loops
+> (repeated tool calls) — we measured 90+ identical calls in a single turn. It works as a chat or
+> single-shot reasoning model; do not hand it an autonomous agent loop.
+
 ## Results (same machine, same model family; ctx 131072 + q8_0 KV)
 
 | Metric | Before (upstream runtime) | After | Change |
