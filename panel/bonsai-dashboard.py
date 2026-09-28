@@ -1070,6 +1070,8 @@ PAGE = r"""<!doctype html>
   body{margin:0;background:var(--bg);color:var(--fg);font:14px/1.55 "Segoe UI","Microsoft YaHei",system-ui,sans-serif}
   header{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 18px;
     border-bottom:1px solid var(--line);background:linear-gradient(180deg,#12171e,#0e1116);position:sticky;top:0;z-index:5}
+  .langbtn{margin-left:auto;font-size:12px;padding:3px 10px;border-radius:999px;border:1px solid var(--line);background:transparent;color:var(--dim);cursor:pointer}
+  .langbtn:hover{color:var(--fg);border-color:var(--fg)}
   .brand{font-weight:600}.brand span{color:var(--dim);font-weight:400;margin-left:8px;font-size:12px}
   .pill{display:inline-flex;align-items:center;gap:8px;padding:4px 12px;border-radius:999px;
     background:var(--panel2);border:1px solid var(--line);font-size:12px;color:var(--dim)}
@@ -1150,6 +1152,7 @@ PAGE = r"""<!doctype html>
 <body>
 <header>
   <div class="brand">Bonsai 2 27B <span>推理控制台</span></div>
+  <button id="langBtn" type="button" class="langbtn" title="Switch to English">EN</button>
   <div class="pill"><i class="dot" id="dot"></i><span id="statusText">连接中…</span></div>
 </header>
 <main>
@@ -1313,6 +1316,330 @@ PAGE = r"""<!doctype html>
 </main>
 <script>
 const $ = (id) => document.getElementById(id);
+
+/* ===== i18n: zh ⇄ en (generated) ===== */
+const I18N_EN = {
+ "推理控制台": "Inference Console",
+ "CPU 线程 -t（空=自动）": "CPU threads -t (blank = auto)",
+ "Codex 自动压缩阈值（token，写入模型目录/CC Switch，不是 llama-server 参数）": "Codex auto-compact threshold (tokens; written into the model catalog / CC Switch, not a llama-server flag)",
+ "GPU 层数 -ngl": "GPU layers -ngl",
+ "KV 位置：–": "KV location: –",
+ "KV 占用：–": "KV usage: –",
+ "KV 校准：–": "KV calibration: –",
+ "KV 缓存 K": "KV cache K",
+ "KV 缓存 V": "KV cache V",
+ "KV 缓存放显存（--kv-offload，必须开才快）": "Keep the KV cache in VRAM (--kv-offload; required for speed)",
+ "KV 缓存：–": "KV cache: –",
+ "MTP 停止深度 --spec-draft-depth-max（0=不停止）": "MTP draft depth limit --spec-draft-depth-max (0 = never stop)",
+ "MTP 草稿长度 --spec-draft-n-max": "MTP draft length --spec-draft-n-max",
+ "f16（纯净）": "f16 (lossless)",
+ "q4_0（量化）": "q4_0 (quantised)",
+ "q8_0（量化）": "q8_0 (quantised)",
+ "⚡ 短会话 · MTP 加速（ctx 64K）": "⚡ Short session · MTP boost (ctx 64K)",
+ "一键切官方 instruct 档（关思考 · 0.7 / 0.80 / 20 · presence 1.5）": "Use the official instruct preset (thinking off · 0.7 / 0.80 / 20 · presence 1.5)",
+ "一键接入 CC Switch / Codex": "One-click connect: CC Switch / Codex",
+ "上下文长度 -c": "Context length -c",
+ "上下文：–": "Context: –",
+ "不会关闭其它任何程序": "no other program is touched",
+ "使用 K 缓存校准 bias（仅 q4_0 生效，提升长上下文质量）": "Use the K-cache calibration bias (q4_0 only; better long-context quality)",
+ "停止服务": "Stop service",
+ "停止生成": "Stop generating",
+ "关闭": "Off",
+ "关闭（直接回答，最快）": "Off (answers directly, fastest)",
+ "利用率": "Utilisation",
+ "功耗": "Power",
+ "加载中…": "Loading…",
+ "卸载模型并退出面板": "Unload model & exit panel",
+ "发送": "Send",
+ "可调参数上限（实时读取模型元数据 + 显卡）": "Parameter limits (read live from the GGUF metadata + the GPU)",
+ "右侧可实时看到生成速度、显卡温度与显存，也可以像 LM Studio 一样改加载参数后一键重载。": "Generation speed, GPU temperature and VRAM update live on the right; you can edit the load parameters and reload with one click, just like LM Studio.",
+ "启动服务": "Start service",
+ "启用视觉（mmproj）": "Enable vision (mmproj)",
+ "复制": "Copy",
+ "外显协议": "Visible-analysis protocol",
+ "实时曲线（tok/s）": "Live curve (tok/s)",
+ "对比其它量化 + 官方预编译": "Compare with other quants + the official prebuilt",
+ "对话 32K · 纯净": "Chat 32K · lossless",
+ "对话已清空。": "Chat cleared.",
+ "已卸载模型，显存已释放": "Model unloaded, VRAM released",
+ "平均速度": "Avg speed",
+ "并发槽位 -np（留空=自动，推荐）": "Parallel slots -np (blank = auto, recommended)",
+ "并发：–": "Parallel: –",
+ "应用并重载": "Apply & reload",
+ "开启": "On",
+ "开启 · medium（更快、回答更短）": "On · medium (faster, shorter answers)",
+ "开启 · xhigh（官方默认，最强）": "On · xhigh (official default, strongest)",
+ "引擎状态": "Engine",
+ "快测 1 次": "Quick · 1 run",
+ "思考模式": "Thinking mode",
+ "思考过程": "Thinking",
+ "思考预算 --reasoning-budget（空=不限）": "Thinking budget --reasoning-budget (blank = unlimited)",
+ "思考：–": "Thinking: –",
+ "总耗时": "Total time",
+ "把上下文填到当前显存可支持的最大值": "Fill the context to the largest value the current VRAM supports",
+ "投机解码 MTP（草稿头已嫁接进主 GGUF，跑在目标权重上，+1.0 GB 显存；实测解码 +26~38%、12K 深度 +27%，代价是冷启动大 prompt 的 prefill 约 -45%，多轮会话前缀缓存不受影响）": "Speculative decoding (MTP): the draft head is grafted into the main GGUF and runs on the target weights (+1.0 GB VRAM). Measured decode +26–38%, +27% at 12K depth, at the cost of ~-45% prefill on a cold long prompt; multi-turn prefix caching is unaffected.",
+ "提示": "Note",
+ "提示：KV 缓存选 q8_0/q4_0 会自动要求 FlashAttention 开启；": "Note: a q8_0/q4_0 KV cache automatically requires FlashAttention;",
+ "显卡状态": "GPU status",
+ "显存争用 &amp; 干净基准": "VRAM contention &amp; clean benchmark",
+ "极限 256K · q4_0（自动关 MTP）": "Extreme 256K · q4_0 (MTP auto-off)",
+ "标准 3 次": "Standard · 3 runs",
+ "模型加载参数（改完点“应用并重载”）": "Model load parameters (click “Apply & reload” when done)",
+ "模型文件": "Model file",
+ "清空对话": "Clear chat",
+ "温度": "Temp",
+ "温度 temp": "Temperature temp",
+ "生成速度": "Generation speed",
+ "等待请求": "Waiting for a request",
+ "精确 5 次": "Precise · 5 runs",
+ "自动": "Auto",
+ "表示全部层放显存； 并发槽位大于 1 时总上下文会被均分（每槽 = 上下文 ÷ 并发），单人使用建议填 1。": "means all layers stay in VRAM; with parallel slots > 1 the total context is split evenly (per slot = context ÷ slots) — keep it at 1 for single-user use.",
+ "视觉塔放内存（省 ~0.9 GB 显存，只影响图片预填充）": "Keep the vision tower in RAM (saves ~0.9 GB VRAM; only affects image prefill)",
+ "视觉：–": "Vision: –",
+ "说明：跑基准时会先停掉本服务腾出显存，": "The benchmark stops this service first to free VRAM;",
+ "跑干净基准（自动停/起服务）": "Run clean benchmark (stops/starts the service)",
+ "输入 tokens": "Input tokens",
+ "输出 tokens": "Output tokens",
+ "连接中…": "Connecting…",
+ "重载模型后如果 CC Switch / Codex 还认旧的（模型名、上下文、思考档位不匹配），点上面的「一键接入」：会刷新 CC Switch 里的两条供应商条目、修正 Codex 的 config.toml（含四档思考目录）并做一次自检。": "If CC Switch / Codex still holds the old entry after a reload (model name, context or reasoning levels no longer match), click “One-click connect” above: it refreshes both provider entries in CC Switch, fixes Codex's config.toml (including the four reasoning levels) and runs a self-check.",
+ "长文 64K · 纯净": "Long text 64K · lossless",
+ "面板已关闭。想继续用就双击桌面「Bonsai 2 27B 控制台」。": "Panel closed. Double-click the “Bonsai 2 27B Console” desktop shortcut to start it again.",
+ "预填充": "Prefill",
+ "首 token": "First token",
+ "；跑完自动按当前参数恢复服务。": "; the service is restored with the current parameters when it finishes.",
+ "🤖 Agent 最优（实测调优）": "🤖 Best for agents (measured tuning)",
+ "显存争用 & 干净基准": "VRAM contention & clean benchmark",
+ "DRY multiplier（0.5 温和 / 0.8 推荐 / 1.1 激进）": "DRY multiplier (0.5 mild / 0.8 recommended / 1.1 aggressive)",
+ "DRY allowed length（连续重复超过几个 token 才罚）": "DRY allowed length (penalise repeats longer than this many tokens)",
+ "启用 DRY 防复读（压制 \"but wait / let me do\" 式重复输出；工具调用循环仍需协议规则）": "Enable DRY repeat suppression (fights \"but wait / let me do\" text loops; tool-call loops still need the protocol rules)",
+ "Bonsai 2 27B · 推理控制台": "Bonsai 2 27B · Inference Console",
+ "输入消息…（Enter 发送，Shift+Enter 换行）": "Type a message… (Enter to send, Shift+Enter for a new line)",
+ "注入「分析/推理/存疑」外显协议并关闭隐式思考（协议文本：work\\bonsai-reasoning-protocol.md）": "Injects the analyse/reason/doubt visible-analysis protocol and turns implicit thinking off (protocol text: work\\bonsai-reasoning-protocol.md)",
+ "CC Switch 供应商": "CC Switch provider",
+ "CC Switch 在运行，供应商条目未动（需要时点「一键接入」）": "CC Switch is running; the provider entries were left alone (use “One-click connect” when needed)",
+ "CC Switch 条目同步失败": "Failed to sync the CC Switch entries",
+ "CC Switch 条目已同步": "CC Switch entries synced",
+ "CPU 线程": "CPU threads",
+ "Codex config 同步出错：%s": "Codex config sync error: %s",
+ "Codex config.toml 已同步": "Codex config.toml synced",
+ "Codex 当前供应商": "Codex's current provider",
+ "Codex 模型目录": "Codex model catalog",
+ "Codex 现在指向别的供应商（不是本地）—— 在 CC Switch 里点一下「Bonsai 2 27B（本地 V100）」": "Codex currently points at another provider (not the local one) — pick “Bonsai 2 27B (local V100)” in CC Switch",
+ "GPU 层数": "GPU layers",
+ "config.toml 已是最新（无需改动）": "config.toml is already up to date (nothing to change)",
+ "llama-server 在线：%s（模型 %s）": "llama-server online: %s (model %s)",
+ "ubatch 不能大于 batch，已下调": "ubatch cannot exceed batch — lowered automatically",
+ "一键接入": "One-click connect",
+ "上下文长度": "Context length",
+ "先把本地服务跑起来，再点一次这个按钮。": "Start the local service first, then click this button again.",
+ "包含 bin/cuda/llama-server.exe、models/ 与 dashboard-config.json 的目录": "the directory containing bin/cuda/llama-server.exe, models/ and dashboard-config.json",
+ "即可切换；本次没有改动它的 config.toml": "to switch; its config.toml was left untouched this time",
+ "就能用 /reasoning 切「关 / low / medium / xhigh」。": "then use /reasoning to switch between off / low / medium / xhigh.",
+ "已停止服务（结束进程 {killed or '无'}）": "Service stopped (killed: {killed or 'none'})",
+ "已写入/刷新 Codex 与 Claude 两条供应商（BASE_URL %s）": "Wrote/refreshed both the Codex and Claude provider entries (BASE_URL %s)",
+ "已卸载模型（结束进程 {killed or '无'}）并关闭面板": "Model unloaded (killed: {killed or 'none'}) and the panel is closing",
+ "已接入。在 CC Switch 里点一下「Bonsai 2 27B（本地 V100）」，再在 Codex 里新开一个会话，": "Connected. Pick “Bonsai 2 27B (local V100)” in CC Switch and open a new Codex session,",
+ "已是最新": "up to date",
+ "并发槽位": "Parallel slots",
+ "找不到 %s": "%s not found",
+ "找不到 ~/.codex/config.toml（未安装 Codex CLI/App？）": "~/.codex/config.toml not found (Codex CLI/App not installed?)",
+ "无法连接 {UPSTREAM}：{exc}": "Cannot reach {UPSTREAM}: {exc}",
+ "服务已在运行": "Service already running",
+ "服务没在跑 —— 回面板点「启动服务」或「应用并重载」再接入": "The service is not running — click “Start service” or “Apply & reload” in the panel, then try again",
+ "本地服务": "Local service",
+ "模型目录已同步": "Model catalog synced",
+ "缺少 ~/.codex/bonsai-model-catalog.json（生成脚本没跑成功）": "~/.codex/bonsai-model-catalog.json is missing (the generator script did not finish)",
+ "警告：找不到 {SERVER_EXE}；请用 --demo-dir 指向正确的 bonsai-demo 目录": "Warning: {SERVER_EXE} not found; point --demo-dir at the right bonsai-demo directory",
+ "（也可用环境变量 BONSAI_DEMO_DIR）": "(or set the BONSAI_DEMO_DIR environment variable)",
+ "；CC Switch 已重启": "; CC Switch was restarted",
+ "；CC Switch 当时没在运行": "; CC Switch was not running",
+ "；CC Switch 重启失败，请手动打开": "; restarting CC Switch failed, please open it manually",
+ "；数据库备份 ": "; database backup ",
+ "{prefix} · 服务：{msg}": "{prefix} · service: {msg}",
+ "从 GGUF 元数据里拿层数 / 训练上下文等硬上限。": "Reads the hard limits (layer count, trained context) from the GGUF metadata.",
+ "优先 taskkill；某些沙箱会拦 taskkill.exe，退回 PowerShell 的 Stop-Process。": "Prefers taskkill; some sandboxes block taskkill.exe, so it falls back to PowerShell Stop-Process.",
+ "优先解析 llama-bench 的 JSON（-o json），失败则退回 markdown 表格。": "Parses llama-bench JSON (-o json) first, falling back to the markdown table.",
+ "停止服务，腾出显存…": "Stopping the service to free VRAM…",
+ "内存（--no-kv-offload，会变慢）": "RAM (--no-kv-offload, slower)",
+ "加载超时（看日志尾部）": "Loading timed out (check the tail of the log)",
+ "完成": "Done",
+ "官方预编译二进制 + {os.path.basename(abs_model)} [{kv}]": "Official prebuilt binary + {os.path.basename(abs_model)} [{kv}]",
+ "已开始：先停服务 → 跑 llama-bench → 自动恢复服务（期间不能对话）": "Started: stop service → run llama-bench → restore the service automatically (no chat while it runs)",
+ "已有基准任务在跑": "A benchmark task is already running",
+ "开启（官方推荐）": "On (recommended)",
+ "恢复服务…": "Restoring the service…",
+ "恢复服务失败：{exc}": "Failed to restore the service: {exc}",
+ "显存（--kv-offload，解码更快）": "VRAM (--kv-offload, faster decode)",
+ "模型已加载": "Model loaded",
+ "正在停止旧实例…": "Stopping the old instance…",
+ "正在加载模型…": "Loading the model…",
+ "端口 {SERVER_PORT} 仍被进程占用：{busy}；先「停止服务」再启动": "Port {SERVER_PORT} is still held by process {busy}; stop the service first",
+ "端口 {SERVER_PORT} 仍被进程占用：{remaining}（可能没有权限结束它）": "Port {SERVER_PORT} is still held by {remaining} (may lack permission to kill it)",
+ "纯净 FP16（未量化）": "pure FP16 (unquantised)",
+ "部分在内存（仅 {ngl} 层上 GPU）": "partly in RAM (only {ngl} layers on the GPU)",
+ "面板重启后，把上次干净基准的结果填回状态，免得卡片空着。": "After a panel restart the last clean-benchmark result is restored so the card is not empty.",
+ "上次干净基准：{last.get('at', '')}（{last.get('log_path', '')}）": "Last clean benchmark: {last.get('at', '')} ({last.get('log_path', '')})",
+ "出错（{_bench['error']}）": "Error ({_bench['error']})",
+ "基准 {i}/{len(targets)}：{target['label']}": "Benchmark {i}/{len(targets)}: {target['label']}",
+ "按多轮 agent 负载的实测形态定档：每轮上下文 p50 63K / p90 96K（集中在 32K~110K）→ 128K 窗口 + 100K 自动压缩（105~110K 是模型的退化区间）；每轮新增只有 p50 ~500 token（p90 ~1.3K）、输出 p50 ~300 token、每轮 1 次工具调用 → 128K + q8_0（近无损且快）、batch 8192/ubatch 1024（实测 ub 512/1024/2048 在这种": "Tuned to the measured shape of a multi-turn agent workload: context per turn p50 63K / p90 96K (mostly 32K–110K) → 128K window + 100K auto-compact (105–110K is where the model degrades); each turn adds only ~500 tokens (p90 ~1.3K) and outputs ~300 tokens with ~1 tool call → 128K + q8_0 (near-lossless and fast), batch 8192/ubatch 1024 (10-turn runs measured 47.3/44.3/45.1 s for ub 512/1024/2048 — no difference; at 128K, ub 2048 runs out of VRAM headroom, hence 1024), 1 slot (the prefix cache always hits), MTP + CUDA-graph shape cache (decode 60.8 vs 29.8 t/s with graphs off), thinking off + 256 budget, precision sampling 0.3/0.9/40/min_p 0.05/presence 0, vision tower in RAM, auto-compact 100K",
+ "模型训练上限 262144。128K 的 q8_0 KV 在 16GB 上已是极限，再往上必须换 q4_0（每 token 18.4 KB，262144 全量才 4.8 GB）。实测（2026-09-27，49K token 语料）：q4_0 相对 q8_0 的 PPL 是 4.6703 vs 4.6649 —— 统计上测不出差别；100K 深度 prefill 反而快 13%（692 vs 613 t/s），解码 19.6 vs 19.8 t/s（关 MTP 时相当）。代价：这个档位装不下 MTP（草稿上下文也要整窗 KV），而且 q4_0 的 vec 内核在线反量化，MTP 的收益会从 +30% 掉到 +3%，所以两者本就不该叠。": "The training ceiling is 262,144 tokens. A 128K q8_0 KV cache is already the limit on 16 GB; beyond that you must switch to q4_0 (18.4 KB per token — the full 262,144 only needs 4.8 GB). Measured (2026-09-27, 49K-token corpus): q4_0 vs q8_0 PPL 4.6703 vs 4.6649 — statistically indistinguishable; at 100K depth prefill is 13% faster (692 vs 613 t/s) and decode 19.6 vs 19.8 t/s (a wash with MTP off). The catch: this preset cannot fit MTP (the draft context needs a full-window KV cache too) and q4_0's vector kernel dequantises inline, which drops MTP's gain from +30% to +3% — so the two should not be combined.",
+ "短会话（ctx 64K）专用档：开 MTP 草稿头 n_max=2 + ubatch 2048（服务端自动开图形状缓存）。实测同配置解码 +10~34%（数学类任务最高），代价是 +1.5~3 GB 显存；实填超过 32K 的会话会变慢，长会话请用上面的 Agent 128K 档。ubatch 2048 的理由：权重重反量化按 ubatch 计费，实测 32K/64K/96K 上下文下预填充 +5~7%、解码 +12~25%，显存只多 ~240 MiB（96K 时 12.8 GB）；131072 档会贴边所以仍用 1024。": "Short-session (ctx 64K) preset: MTP draft head at n_max=2 + ubatch 2048 (the server enables the CUDA-graph shape cache automatically). Measured with the same settings: decode +10–34% (best on maths), at the cost of +1.5–3 GB VRAM; sessions that actually exceed 32K get slower — use the Agent 128K preset above for those. Why ubatch 2048: weight dequantisation is charged per ubatch — measured at 32K/64K/96K context, prefill +5–7% and decode +12–25% for only ~240 MiB extra VRAM (12.8 GB at 96K); the 131072 setting runs too close to the edge, so it stays at 1024."
+};
+const I18N_RULES = [
+  [/^按多轮 agent 负载的实测形态定档[\s\S]*$/, "Tuned to the measured shape of a multi-turn agent workload: context per turn p50 63K / p90 96K (mostly 32K–110K) → 128K window + 100K auto-compact (105–110K is where the model degrades); each turn adds only ~500 tokens (p90 ~1.3K) and outputs ~300 tokens with ~1 tool call → 128K + q8_0 (near-lossless and fast), batch 8192/ubatch 1024, 1 slot (the prefix cache always hits), MTP + CUDA-graph shape cache (decode 60.8 vs 29.8 t/s with graphs off), thinking off + 256 budget, precision sampling 0.3/0.9/40/min_p 0.05/presence 0, vision tower in RAM, auto-compact 100K"],
+  [/^按你本人的真实用法定的档[\s\S]*$/, "Tuned to the author's real Codex usage: context per turn p50 ~63K / p90 ~96K (mostly 32K–110K) → 128K window + 100K auto-compact; each turn adds only ~500 tokens (p90 ~1.3K) and outputs ~300 tokens with ~1 tool call → 128K + q8_0, batch 8192/ubatch 1024, 1 slot (prefix cache always hits), MTP + CUDA-graph shape cache, thinking off + 256 budget, precision sampling 0.3/0.9/40/min_p 0.05/presence 0, vision tower in RAM, auto-compact 100K"],
+  [/^模型训练上限 262144。[\s\S]*$/, "The training ceiling is 262,144 tokens. A 128K q8_0 KV cache is already the limit on 16 GB; beyond that switch to q4_0 (18.4 KB per token — the full 262,144 needs 4.8 GB). Measured (2026-09-27, 49K-token corpus): q4_0 vs q8_0 PPL 4.6703 vs 4.6649 — statistically indistinguishable; at 100K depth prefill is 13% faster (692 vs 613 t/s) and decode 19.6 vs 19.8 t/s (a wash with MTP off). This preset cannot fit MTP (the draft context needs a full-window KV cache too) and q4_0's vector kernel dequantises inline, which drops MTP's gain from +30% to +3% — do not combine them."],
+  [/^短会话（ctx 64K）专用档[\s\S]*$/, "Short-session (ctx 64K) preset: MTP draft head at n_max=2 + ubatch 2048 (the server enables the CUDA-graph shape cache automatically). Measured with the same settings: decode +10–34% (best on maths), at the cost of +1.5–3 GB VRAM; sessions that actually exceed 32K get slower — use the Agent 128K preset. Why ubatch 2048: weight dequantisation is charged per ubatch — at 32K/64K/96K context prefill +5–7% and decode +12–25% for ~240 MiB extra VRAM; the 131072 setting runs too close to the edge, so it stays 1024."],
+  [/^注入「分析\/推理\/存疑」外显协议[\s\S]*$/, "Injects the analyse/reason/doubt visible-analysis protocol and turns implicit thinking off (protocol text: work\\bonsai-reasoning-protocol.md)"],
+  [/^CPU 线程 -t：(.+)$/, "CPU threads -t: \\1"],
+  [/^KV 每 token：(.+)$/, "KV per token: \\1"],
+  [/^• (.+)：pp (.+) t\/s ｜ tg (.+) t\/s（(.+) 次）$/, "• \\1: pp \\2 t/s | tg \\3 t/s (\\4 runs)"],
+  [/^官方预编译二进制 \+ (.+)$/, "Official prebuilt binary + \\1"],
+  [/^估算：本服务 ≈ (.+) ｜ 其它程序 ≈ (.+)（整卡 (.+)）$/, "Estimated: this service ≈ \\1 | other processes ≈ \\2 (card \\3)"],
+  [/^其它程序占显存 (.+)（干净）$/, "Other processes use \\1 VRAM (clean)"],
+  [/^显存 (.+) \/ (.+) GB（(.+)%）$/, "VRAM \\1 / \\2 GB (\\3%)"],
+  [/^显存：(.+) 空闲 \/ (.+) 总量$/, "VRAM: \\1 free / \\2 total"],
+  [/^层数 -ngl：模型 (.+) 层（填 (.+) = 连附加张量全部上卡）$/, "Layers -ngl: the model has \\1 layers (use \\2 = every tensor on the GPU)"],
+  [/^并发 -np：留空\(自动\) 或 (.+)$/, "Parallel -np: blank (auto) or \\1"],
+  [/^并发槽位：(.+)$/, "Parallel slots: \\1"],
+  [/^当前显存可支持：(.+)$/, "VRAM can support: \\1"],
+  [/^服务在线 · (.+) · 上下文 (.+)$/, "Online · \\1 · context \\2"],
+  [/^架构：(.+)$/, "Architecture: \\1"],
+  [/^模型：(.+) · (.+)$/, "Model: \\1 · \\2"],
+  [/^采样：温度 (.+)，(.+)$/, "Sampling: temp \\1, \\2"],
+  [/^训练上下文上限：(.+)$/, "Trained context limit: \\1"],
+  [/^(FlashAttention)：(.+)$/, "\\1: \\2"],
+  [/^\/ 自动压缩 (.+)$/, "/ auto-compact \\1"],
+  [/^(.+) → (.+)（范围 0–(.+)）$/, "\\1 → \\2 (range 0–\\3)"],
+  [/^(.+) → (.+)（范围 (.+?)–(.+)）$/, "\\1 → \\2 (range \\3–\\4)"],
+  [/^上游 (\d+): (.+)$/, "upstream \\1: \\2"],
+  [/^量化 (.+?)\/(.+)$/, "quantised \\1/\\2"],
+  [/^并发：(.+)$/, "Parallel: \\1"],
+  [/^上下文：(.+)$/, "Context: \\1"],
+  [/^思考：(.+)$/, "Thinking: \\1"],
+  [/^视觉：(.+)$/, "Vision: \\1"],
+  [/^KV 缓存：(.+)$/, "KV cache: \\1"],
+  [/^KV 位置：(.+)$/, "KV location: \\1"],
+  [/^KV 占用：(.+)$/, "KV usage: \\1"],
+  [/^KV 校准：(.+)$/, "KV calibration: \\1"],
+  [/^(.+) → 档位 (.+)$/, "\\1 → level \\2"],
+  [/^已停止服务（结束进程 (.+)）$/, "Service stopped (killed: \\1)"],
+  [/^已卸载模型（结束进程 (.+)）$/, "Model unloaded (killed: \\1)"],
+  [/^(FlashAttention：)(.+)$/, "\\1\\2"]
+];
+const I18N_GLOBAL = [
+  [/（(\d+) 次）/g, "(\\1 runs)"],
+  [/：pp /g, ": pp "],
+  [/ ｜ /g, " | "],
+  [/官方预编译二进制/g, "Official prebuilt binary"],
+  [/其它程序占显存/g, "Other processes use"],
+  [/（干净）/g, " (clean)"]
+];
+const I18N_EN_WS = {};
+for (const k in I18N_EN) I18N_EN_WS[k.replace(/\s+/g, " ").trim()] = I18N_EN[k];
+const I18N_KEY = "bonsai.lang";
+const I18N_SKIP = new Set(["SCRIPT", "STYLE", "PRE", "CODE", "TEXTAREA"]);
+const _i18nOrig = new WeakMap();
+const _i18nText = (k, v) => ({ ok: true, text: v });
+
+function i18nExcluded(node) {
+  for (let el = node.nodeType === 1 ? node : node.parentElement; el; el = el.parentElement) {
+    if (el.id === "messages" || (el.classList && el.classList.contains("md"))) return true;
+    if (I18N_SKIP.has(el.tagName)) return true;
+    if (el.hasAttribute && el.hasAttribute("data-i18n-skip")) return true;
+  }
+  return false;
+}
+
+function i18nLookup(src) {
+  const s = String(src);
+  const t = s.trim();
+  if (!t) return null;
+  if (I18N_EN[t] !== undefined) return s.replace(t, I18N_EN[t]);
+  const ws = t.replace(/\s+/g, " ");
+  if (I18N_EN_WS[ws] !== undefined) return s.replace(t, I18N_EN_WS[ws]);
+  for (const [re, rep] of I18N_RULES) {
+    if (re.test(t)) {
+      const nv = t.replace(re, rep);
+      if (nv !== t) return s.replace(t, nv);
+    }
+  }
+  let out = t;
+  for (const [re, rep] of I18N_GLOBAL) out = out.replace(re, rep);
+  if (out !== t) return s.replace(t, out);
+  return null;
+}
+
+function i18nTextNode(node, lang) {
+  if (!node || node.nodeType !== 3 || i18nExcluded(node)) return;
+  let orig = _i18nOrig.get(node);
+  if (orig === undefined) { orig = node.nodeValue; _i18nOrig.set(node, orig); }
+  if (lang !== "en") { if (node.nodeValue !== orig) node.nodeValue = orig; return; }
+  const en = i18nLookup(orig);
+  if (en !== null && node.nodeValue !== en) node.nodeValue = en;
+}
+
+function i18nAttrs(root, lang) {
+  const els = root.querySelectorAll ? root.querySelectorAll("[title],[placeholder]") : [];
+  els.forEach(el => {
+    ["title", "placeholder"].forEach(a => {
+      if (!el.hasAttribute(a)) return;
+      const key = "_i18n_" + a;
+      if (el.dataset[key] === undefined) el.dataset[key] = el.getAttribute(a);
+      const orig = el.dataset[key];
+      if (lang !== "en") { el.setAttribute(a, orig); return; }
+      const en = i18nLookup(orig);
+      if (en !== null) el.setAttribute(a, en);
+    });
+  });
+}
+
+function applyI18n(lang, root) {
+  const scope = root || document.body;
+  const walker = document.createTreeWalker(scope, NodeFilter.SHOW_TEXT);
+  while (walker.nextNode()) i18nTextNode(walker.currentNode, lang);
+  i18nAttrs(scope, lang);
+  const t = document.querySelector("title");
+  if (t) {
+    if (t.dataset.zh === undefined) t.dataset.zh = t.textContent;
+    const en = lang === "en" ? i18nLookup(t.dataset.zh) : null;
+    t.textContent = en !== null ? en : t.dataset.zh;
+  }
+}
+
+function currentLang() { return localStorage.getItem(I18N_KEY) === "en" ? "en" : "zh"; }
+
+function setLang(lang) {
+  if (lang !== "en") lang = "zh";
+  localStorage.setItem(I18N_KEY, lang);
+  document.documentElement.lang = lang === "en" ? "en" : "zh-CN";
+  applyI18n(lang);
+  const b = document.getElementById("langBtn");
+  if (b) { b.textContent = lang === "en" ? "中文" : "EN"; b.title = lang === "en" ? "切换到中文" : "Switch to English"; }
+}
+/* ===== i18n: zh ⇄ en (generated init) ===== */
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 const messagesEl = $("messages"), inputEl = $("input");
 let history = [], running = false, controller = null, samples = [], timer = null;
 let reloading = false;
@@ -1878,6 +2205,43 @@ $("benchBtn").addEventListener("click", async ()=>{
   await loadConfigForm();
 })();
 drawSpark(); poll(); loadPrefs(); setInterval(poll, 1000); setInterval(loadConfigForm, 20000);
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+/* ---- i18n init ---- */
+(function () {
+  try {
+    const b = $("langBtn");
+    if (b) b.addEventListener("click", () => setLang(currentLang() === "en" ? "zh" : "en"));
+    const q = new URLSearchParams(location.search).get("lang");   // ?lang=en / ?lang=zh
+    setLang(q || currentLang());
+    new MutationObserver(muts => {
+      if (currentLang() !== "en") return;
+      for (const m of muts) {
+        if (m.type === "characterData") i18nTextNode(m.target, "en");
+        else m.addedNodes.forEach(n => {
+          if (n.nodeType === 3) i18nTextNode(n, "en");
+          else if (n.nodeType === 1) applyI18n("en", n);
+        });
+      }
+    }).observe(document.body, { subtree: true, childList: true, characterData: true });
+  } catch (e) {
+    document.title = "i18n-error: " + (e && e.message ? e.message : e);
+    if (window.console) console.error("[i18n]", e);
+  }
+})();
 </script>
 </body>
 </html>
@@ -2079,13 +2443,14 @@ class Handler(BaseHTTPRequestHandler):
         self.wfile.write(raw)
 
     def do_GET(self):
-        if self.path in ("/", "/index.html"):
+        path = self.path.split("?", 1)[0]          # ignore ?lang=… and other query strings
+        if path in ("/", "/index.html"):
             self._send(200, PAGE, "text/html; charset=utf-8")
-        elif self.path == "/api/status":
+        elif path == "/api/status":
             self._send(200, json.dumps(status_payload(), ensure_ascii=False))
-        elif self.path == "/api/prefs":
+        elif path == "/api/prefs":
             self._send(200, json.dumps(load_prefs(), ensure_ascii=False))
-        elif self.path == "/api/loadconfig":
+        elif path == "/api/loadconfig":
             models, mmprojs = list_files()
             self._send(200, json.dumps({
                 "config": load_config(), "models": models, "mmprojs": mmprojs,
