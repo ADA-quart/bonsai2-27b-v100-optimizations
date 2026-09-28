@@ -38,6 +38,8 @@ code/      new/rewritten kernels (D256 prefill FA, decode prototype, PTQ1_0 plan
            sm70-vendor/ two BSD-3 licence texts + fetch notes; the 7 flash/ headers ship with the repo
            (cute/cutlass still have to be fetched from upstream)
 panel/     the control panel (live tok/s, first token, VRAM breakdown, GPU temp/power, one-click setup, …)
+           bonsai-2-chat-template.jinja — the chat template we run in production (reasoning levels,
+           thinking on/off, mid-conversation system messages, and the tool-loop guard)
 tools/     probes and benchmarks (prefill-probe, agent-turn bench, phase profiling, spec-bench, deploy script)
 docs/      research log: per-change A/Bs, rejected directions, performance ledger, before/after (Chinese)
            English versions: BEFORE-AFTER.en.md (one-pager) and TOOLS.en.md (script map)
@@ -86,6 +88,13 @@ THIRD-PARTY-NOTICES.md + THIRD-PARTY-LICENSES/   upstream & third-party licence 
 * Experimental kernels that are off by default (`GGML_SM70_D256_DECODE`,
   `GGML_PTQ1_0_MULTI_CHUNK_MAX`, `SPC_DECODE_PROF`, …) are kept for the record only; the
   production path does not enable them.
+* **Tool-loop guard**: `panel/bonsai-2-chat-template.jinja` counts consecutive *identical* tool
+  calls (same tool, same arguments); at 3 it appends a warning to the **last tool response**, right
+  before the next assistant turn, telling the model to stop repeating and use a different command
+  (and listing the tools it is allowed to use). Sampling-level anti-repetition (DRY, even with
+  `--dry-sequence-breaker none`) does **not** break those loops — the model still has to emit *some*
+  tool call — while the template-level guard does: measured on a 3-repeat conversation, the model
+  switched to a different tool instead of repeating, and the server kept parsing the call.
 * **Language**: the detailed research notes under `docs/` are written in Chinese; this README and
   its result tables are in English, and the key conclusions match.
 

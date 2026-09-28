@@ -34,6 +34,8 @@ patches/   1) oripoin-picks-20260926-full.patch   上游 842b18804 → 9b98d9dfd
 code/      新增/重写的内核（D256 prefill FA、解码原型、PTQ1_0 planar mat-vec）——与补丁 2 内容一致，供阅读
            sm70-vendor/ 两个 BSD-3 许可文本 + 拉取说明；flash/ 的 7 个头文件随仓库分发（cute/cutlass 需自行拉取）
 panel/     自建控制台（实时 tok/s、首 token、显存拆分、GPU 温度/功耗、一键接入等）
+           bonsai-2-chat-template.jinja —— 生产在用的对话模板（四档思考、思考开关、
+           会话中途的 system 消息，以及**工具循环守卫**）
 tools/     探针与基准脚本（prefill-probe、agent 轮次基准、阶段埋点、spec-bench、部署脚本）
 docs/      研究记录：逐项 A/B、被否证的方向、性能账本、优化前后对比（英文版：BEFORE-AFTER.en.md、TOOLS.en.md）
 THIRD-PARTY-NOTICES.md + THIRD-PARTY-LICENSES/   上游与第三方许可清单与许可正文
@@ -74,6 +76,11 @@ THIRD-PARTY-NOTICES.md + THIRD-PARTY-LICENSES/   上游与第三方许可清单�
 * 文档里的 `work\...` 路径是作者工作树的内部路径，保留作溯源用；脚本里的目录请按你的环境改。
 * 仓库里默认关闭的实验内核（`GGML_SM70_D256_DECODE`、`GGML_PTQ1_0_MULTI_CHUNK_MAX`、
   `SPC_DECODE_PROF` 等）只作记录，生产路径不启用。
+* **工具循环守卫**：`panel/bonsai-2-chat-template.jinja` 会统计"连续完全相同的工具调用"
+  （同工具、同参数）；到 3 次就把一条警告追加进**最后一条工具输出**里（紧贴下一次 assistant
+  生成），要求模型停止重复、换命令或直接作答，并列出它可用的工具名。实测：采样层的反重复
+  （DRY，即使 `--dry-sequence-breaker none`）**压不住**工具调用循环（模型总得输出一个工具调用），
+  而模板层的守卫能——3 次重复的对话里模型改用了别的工具，且服务器解析正常。
 * 详细的实验记录（`docs/`）目前是中文；本 README 与其结果表是英文，关键结论两边一致。
 
 ## 许可
