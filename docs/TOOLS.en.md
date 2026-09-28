@@ -1,6 +1,6 @@
-# Script map (tools/ ↔ doc section ↔ dependencies)
+**English** | [简体中文](TOOLS.md)
 
-[简体中文](TOOLS.md) | **English**
+# Script map (tools/ ↔ doc section ↔ dependencies)
 
 > The scripts in `tools/` come from the author's working tree; paths use a `<REPO>`
 > placeholder (the repo root on the author's machine). Replace `<REPO>` with your own

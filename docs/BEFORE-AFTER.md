@@ -1,6 +1,6 @@
-# Bonsai 2 27B @ V100 16GB：优化前 vs 现在（一页纸）
-
 [English](BEFORE-AFTER.en.md) | **简体中文**
+
+# Bonsai 2 27B @ V100 16GB：优化前 vs 现在（一页纸）
 
 数据来源：`RESULTS-ORIPOIN-PICKS-20260926.md` §1（"旧运行时"= 上游 bonsai-demo 运行时的实测）、
 各节 A/B 表、以及 2026-09-27 在生产配置上的复测（`work\tmp\agent-turn-bench.py`、

@@ -1,6 +1,6 @@
-# Ternary Bonsai 2 27B on a V100 16 GB：把「跑不动」变成「够快」
-
 [English](README.md) | **简体中文**
+
+# Ternary Bonsai 2 27B on a V100 16 GB：把「跑不动」变成「够快」
 
 一套在 **Tesla V100-SXM2-16GB（sm_70，Windows/WDDM）** 上把 27B 三值量化模型
 （1.75 bpw PTQ1_0 + 131072 上下文 + q8_0 KV + MTP 投机解码）从「长提示直接塌掉」

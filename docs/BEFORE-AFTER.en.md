@@ -1,6 +1,6 @@
-# Bonsai 2 27B @ V100 16 GB: before vs now (one pager)
+**English** | [简体中文](BEFORE-AFTER.md)
 
-[简体中文](BEFORE-AFTER.md) | **English**
+# Bonsai 2 27B @ V100 16 GB: before vs now (one pager)
 
 Sources: `RESULTS-ORIPOIN-PICKS-20260926.md` §1 ("old runtime" = the upstream bonsai-demo runtime as
 measured), the per-change A/B tables, and re-runs made on 2026-09-27 in the production

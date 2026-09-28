@@ -1,6 +1,6 @@
-# Ternary Bonsai 2 27B on a 16 GB V100: from "collapses" to "fast enough"
-
 **English** | [简体中文](README.zh-CN.md)
+
+# Ternary Bonsai 2 27B on a 16 GB V100: from "collapses" to "fast enough"
 
 A port-and-tuning log for running a 27B ternary-quantized model (1.75 bpw PTQ1_0, 131,072 context,
 q8_0 KV cache, MTP speculative decoding) on a **Tesla V100-SXM2-16GB (sm_70, Windows/WDDM)** —
@@ -19,9 +19,10 @@ a control panel and every measurement are included.
 | VRAM (ctx 131072) | 15,847 MiB (upstream runtime) | 13,979 MiB incl. MTP (three ub settings: 13,952–13,980) | −1.9 GiB |
 | PPL (2-chunk corpus / q8_0, PQ2_0 → PTQ1_0) | 7.1131 | **7.1131** (bit-identical) | lossless |
 
+> For a one-page English summary of everything below, see **[docs/BEFORE-AFTER.en.md](docs/BEFORE-AFTER.en.md)**.
 > A separate 50K-corpus PPL of 4.6649 belongs to the Volta FA port and the q8_0-vs-q4_0 KV A/B
-> (see `docs/RESEARCH.md` §17) — it is not the PTQ1_0 equivalence evidence. The bit-identical
-> evidence for PTQ1_0 is the 2-chunk corpus in §7.2.
+> (see `docs/RESEARCH.md` §17, Chinese) — it is not the PTQ1_0 equivalence evidence. The
+> bit-identical evidence for PTQ1_0 is the 2-chunk corpus in §7.2.
 
 The "before" numbers are not the model being slow: the FlashAttention kernels dequantized the whole
 session's q8_0 KV cache into f16 (**~512 MiB at 131,072 context, redone for every op**), which blew
@@ -63,11 +64,11 @@ THIRD-PARTY-NOTICES.md + THIRD-PARTY-LICENSES/   upstream & third-party licence 
    CMake); ② fetch `include/cute` and `include/cutlass` from CUTLASS@`62750a2b` into the same
    directory. If you do not want the kernel, delete `fattn-sm70-d256*.cu` (or set
    `LLAMA_SM70_D256=0` at runtime).
-4. Build (our sm_70 configuration is described in `tools/` and `docs/RESEARCH.md` §8).
+4. Build (our sm_70 configuration is described in `tools/` and `docs/RESEARCH.md` §8, Chinese).
 5. Panel: `python panel/bonsai-dashboard.py --port 8090 --server-port 8080 --demo-dir <your model dir>`.
 6. Experiments: the scripts in `tools/` (`prefill-probe.py`, `agent-turn-bench.py`,
    `decode-phase-prof.ps1`, …). Each `docs/` section names the script it used; the script ↔ doc
-   map is in `docs/TOOLS.md`.
+   map is in `docs/TOOLS.en.md` (English) / `docs/TOOLS.md` (Chinese).
 
 ## Notes
 
@@ -75,7 +76,7 @@ THIRD-PARTY-NOTICES.md + THIRD-PARTY-LICENSES/   upstream & third-party licence 
   by their publisher (Apache-2.0) — get them from the original source. This repo only carries code
   and measurements.
 * Numerics: PTQ1_0 rounds differently from the fp16/cuBLAS path, but the end-to-end **greedy output
-  is byte-identical** (`docs/RESEARCH.md` §7.2). The **sm70 D256 prefill path does diverge from
+  is byte-identical** (`docs/RESEARCH.md` §7.2, Chinese). The **sm70 D256 prefill path does diverge from
   stock on greedy output** (§20.3, expected; validate it with PPL / logit divergence), so
   re-check PPL-style metrics after switching paths.
 * `patches/single-feature/*.patch` are excerpts of patch 1 (fastmtp d2t, graph shape cache) —
